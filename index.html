@@ -6,7 +6,23 @@
     <title>SISAVALIA</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
-  <body>
+  <body class="auth-locked">
+    <section id="loginGate" class="login-gate" aria-labelledby="loginTitle">
+      <div class="login-panel">
+        <div class="login-logo" role="img" aria-label="MMA Engenharia e Consultoria"></div>
+        <div class="login-content">
+          <span class="login-kicker">Acesso ao sistema</span>
+          <h1 id="loginTitle">SISAVALIA</h1>
+          <p>Avaliacao imobiliaria por inferencia estatistica</p>
+          <form id="loginForm" class="login-form">
+            <label>Usuario<input id="loginUser" autocomplete="username" value="Admin" required /></label>
+            <label>Senha<input id="loginPassword" type="password" autocomplete="current-password" required /></label>
+            <button class="primary-button" type="submit">Entrar</button>
+            <span id="loginError" class="login-error" role="alert" aria-live="polite"></span>
+          </form>
+        </div>
+      </div>
+    </section>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -39,6 +55,7 @@
           <div class="export-actions">
             <div class="actions">
               <button id="loadSampleBtn" class="icon-button" title="Carregar exemplo">↻</button>
+              <button id="logoutBtn" class="ghost-button">Sair</button>
               <button id="exportHtmlBtn" class="secondary-button">Exportar HTML</button>
               <button id="exportPdfBtn" class="primary-button">Gerar PDF</button>
             </div>

@@ -6,6 +6,8 @@ Sistema inicial para avaliacao imobiliaria por inferencia estatistica, orientado
 
 Abra `index.html` no navegador.
 
+O sistema inicia com um laudo em branco. O botao `↻` na barra superior carrega dados ficticios apenas para demonstracao e testes.
+
 ## Publicacao no Render
 
 O repositorio inclui `render.yaml` para criar um site estatico no Render. No painel do Render, use `New > Blueprint`, conecte o repositorio GitHub e confirme o servico `sisavalia-mma`. O diretorio publicado e a raiz do repositorio e nao ha comando de build.
@@ -24,6 +26,7 @@ O repositorio inclui `render.yaml` para criar um site estatico no Render. No pai
 - Revisao automatica do laudo com pendencias criticas, alertas tecnicos, conferencias manuais e atalhos de correcao.
 - Previa completa e exportacao do laudo em PDF A4 ou HTML no template MMA, incluindo campos do modelo SisAvalia, resultados, diagnosticos, graficos, amostras e memoria de calculo.
 - Gestao local de projetos com salvar, abrir, excluir e backup/importacao em JSON.
+- Tela inicial de acesso administrativo com sessao por aba e identidade visual MMA.
 
 ## Base documental lida
 
@@ -88,3 +91,7 @@ O comando `Gerar PDF` executa a revisao automatica, bloqueia laudos com pendenci
 ## Projetos salvos
 
 Na secao `Projetos Salvos`, informe um nome e use `Salvar projeto`. O armazenamento local preserva todos os campos, amostras e configuracoes do modelo neste navegador. O comando `Abrir` restaura o projeto e recalcula o modelo; `Exportar backup` gera um arquivo JSON, que pode ser recuperado por `Importar projeto` em outro navegador ou computador.
+
+## Controle de acesso
+
+O sistema possui bloqueio inicial de sessao com usuario administrativo. A credencial e validada por hash no navegador e a sessao termina ao usar `Sair` ou fechar a aba. Por se tratar de um site estatico, esse mecanismo e uma barreira de acesso basica; protecao de dados sensiveis em ambiente de producao requer autenticacao em servidor.

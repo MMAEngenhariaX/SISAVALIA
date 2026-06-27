@@ -1,3 +1,49 @@
+const AUTH_SESSION_KEY = "sisavalia.authenticated";
+const AUTH_CREDENTIAL_HASH = "4066a0bbf55aaf9cf2f27c884ddb1a9d95e0550986e76a028f06f2ea0312f8c2";
+const loginGate = document.querySelector("#loginGate");
+const loginForm = document.querySelector("#loginForm");
+const loginUser = document.querySelector("#loginUser");
+const loginPassword = document.querySelector("#loginPassword");
+const loginError = document.querySelector("#loginError");
+
+async function credentialHash(user, password) {
+  const bytes = new TextEncoder().encode(`${user}:${password}`);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function setAuthenticated(authenticated) {
+  document.body.classList.toggle("auth-locked", !authenticated);
+  loginGate.hidden = authenticated;
+  if (authenticated) sessionStorage.setItem(AUTH_SESSION_KEY, "true");
+  else sessionStorage.removeItem(AUTH_SESSION_KEY);
+}
+
+async function authenticate(event) {
+  event.preventDefault();
+  loginError.textContent = "";
+  try {
+    const hash = await credentialHash(loginUser.value.trim(), loginPassword.value);
+    if (hash !== AUTH_CREDENTIAL_HASH) {
+      loginError.textContent = "Usuario ou senha invalidos.";
+      loginPassword.select();
+      return;
+    }
+    loginPassword.value = "";
+    setAuthenticated(true);
+  } catch {
+    loginError.textContent = "Nao foi possivel validar o acesso neste navegador.";
+  }
+}
+
+function logout() {
+  setAuthenticated(false);
+  loginUser.value = "Admin";
+  loginPassword.value = "";
+  loginError.textContent = "";
+  loginPassword.focus();
+}
+
 const fields = {
   osNumber: document.querySelector("#osNumber"),
   osDate: document.querySelector("#osDate"),
@@ -2166,6 +2212,8 @@ document.querySelector("#runModelBtn").addEventListener("click", () => {
 });
 document.querySelector("#exportPdfBtn").addEventListener("click", exportPdfReport);
 document.querySelector("#exportHtmlBtn").addEventListener("click", exportHtmlReport);
+document.querySelector("#logoutBtn").addEventListener("click", logout);
+loginForm.addEventListener("submit", authenticate);
 document.querySelector("#newProjectBtn").addEventListener("click", newBlankProject);
 document.querySelector("#saveProjectBtn").addEventListener("click", saveCurrentProject);
 document.querySelector("#exportProjectBtn").addEventListener("click", exportProjectBackup);
@@ -2185,5 +2233,7 @@ window.SISAVALIA = {
 };
 
 renderVariableControls();
-loadSample();
+newBlankProject();
 renderProjectList();
+setAuthenticated(sessionStorage.getItem(AUTH_SESSION_KEY) === "true");
+if (!loginGate.hidden) loginPassword.focus();

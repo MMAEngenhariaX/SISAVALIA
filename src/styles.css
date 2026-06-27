@@ -359,6 +359,18 @@ input:focus, select:focus, textarea:focus {
 .extended-form details[open] summary { color: var(--green); }
 .extended-form details .form-grid { padding: 4px 4px 18px; }
 
+.cep-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.cep-control button { min-height: 40px; }
+.cep-status { min-height: 16px; color: var(--muted); font-size: 11px; }
+.cep-status.loading { color: var(--blue); }
+.cep-status.ok { color: var(--green); }
+.cep-status.fail { color: var(--red); }
+
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);

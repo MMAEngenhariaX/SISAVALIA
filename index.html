@@ -131,7 +131,14 @@
                 <label>Numero do imovel<input id="addressNumber" /></label>
                 <label>Complemento<input id="addressComplement" /></label>
                 <label>Bairro / setor<input id="neighborhood" /></label>
-                <label>CEP<input id="postalCode" /></label>
+                <label class="cep-label">CEP
+                  <div class="cep-control">
+                    <input id="postalCode" inputmode="numeric" maxlength="9" autocomplete="postal-code" />
+                    <button id="lookupCepBtn" type="button" class="secondary-button">Consultar</button>
+                  </div>
+                  <small id="cepStatus" class="cep-status">Apoio cadastral; nao altera o calculo do valor.</small>
+                </label>
+                <label>Codigo IBGE<input id="ibgeCode" readonly /></label>
                 <label>Condominio / empreendimento<input id="condominiumName" /></label>
                 <label>Matricula<input id="registrationNumber" /></label>
                 <label>Cartorio / oficio<input id="registryOffice" /></label>
@@ -229,12 +236,13 @@
               </select>
               <input id="sampleImportFile" class="file-input" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
               <button id="importSamplesBtn" class="secondary-button">Importar CSV</button>
+              <button id="downloadExcelTemplateBtn" class="ghost-button">Modelo Excel</button>
               <button id="downloadTemplateBtn" class="ghost-button">Modelo CSV</button>
               <button id="addSampleBtn" class="secondary-button">Adicionar</button>
               <button id="clearSamplesBtn" class="ghost-button">Limpar</button>
             </div>
           </div>
-          <p id="importStatus" class="import-status">Importe arquivos CSV/TSV exportados do Excel com colunas: fonte, preco, area, local, padrao, conservacao.</p>
+          <p id="importStatus" class="import-status">Baixe o Modelo Excel, preencha e salve uma copia em CSV UTF-8 para importar: fonte, preco, area, local, padrao, conservacao.</p>
           <div class="table-wrap">
             <table>
               <thead>

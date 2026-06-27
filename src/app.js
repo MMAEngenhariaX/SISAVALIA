@@ -68,6 +68,7 @@ const fields = {
   addressComplement: document.querySelector("#addressComplement"),
   neighborhood: document.querySelector("#neighborhood"),
   postalCode: document.querySelector("#postalCode"),
+  ibgeCode: document.querySelector("#ibgeCode"),
   condominiumName: document.querySelector("#condominiumName"),
   registrationNumber: document.querySelector("#registrationNumber"),
   registryOffice: document.querySelector("#registryOffice"),
@@ -150,6 +151,8 @@ const projectImportFile = document.querySelector("#projectImportFile");
 const sampleImportFile = document.querySelector("#sampleImportFile");
 const importMode = document.querySelector("#importMode");
 const importStatus = document.querySelector("#importStatus");
+const lookupCepBtn = document.querySelector("#lookupCepBtn");
+const cepStatus = document.querySelector("#cepStatus");
 const variableControls = document.querySelector("#variableControls");
 const chartCanvases = {
   adherence: document.querySelector("#adherenceChart"),
@@ -281,6 +284,74 @@ function numeric(value) {
     .replace(",", ".");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+let cepLookupTimer = null;
+let cepAbortController = null;
+
+function cepDigits(value = fields.postalCode.value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function formatCep(value) {
+  const digits = cepDigits(value);
+  return digits.length === 8 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+}
+
+function setCepStatus(message, status = "") {
+  cepStatus.textContent = message;
+  cepStatus.className = `cep-status ${status}`.trim();
+}
+
+async function lookupCep() {
+  const digits = cepDigits();
+  if (digits.length !== 8) {
+    fields.ibgeCode.value = "";
+    setCepStatus("Informe os oito digitos do CEP.", "fail");
+    return;
+  }
+
+  if (cepAbortController) cepAbortController.abort();
+  cepAbortController = new AbortController();
+  setCepStatus("Consultando endereco e contexto territorial...", "loading");
+  try {
+    const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`, {
+      signal: cepAbortController.signal,
+      cache: "force-cache",
+    });
+    if (!response.ok) throw new Error("Servico de CEP indisponivel.");
+    const data = await response.json();
+    if (data.erro) throw new Error("CEP nao encontrado.");
+    if (cepDigits() !== digits) return;
+
+    fields.postalCode.value = data.cep || formatCep(digits);
+    if (data.logradouro) fields.address.value = data.logradouro;
+    if (data.bairro) fields.neighborhood.value = data.bairro;
+    if (data.localidade) fields.city.value = data.localidade;
+    if (data.uf) fields.state.value = data.uf;
+    if (data.complemento && !fields.addressComplement.value.trim()) fields.addressComplement.value = data.complemento;
+    fields.ibgeCode.value = data.ibge || "";
+
+    markProjectDirty();
+    updateAll();
+    const scope = [data.bairro, data.localidade, data.uf].filter(Boolean).join(" - ");
+    setCepStatus(`Endereco localizado${scope ? `: ${scope}` : ""}. Confira numero e complemento.`, "ok");
+  } catch (error) {
+    if (error.name === "AbortError") return;
+    fields.ibgeCode.value = "";
+    setCepStatus(`${error.message} Preencha o endereco manualmente.`, "fail");
+  }
+}
+
+function scheduleCepLookup() {
+  clearTimeout(cepLookupTimer);
+  const digits = cepDigits();
+  if (digits.length < 8) {
+    fields.ibgeCode.value = "";
+    setCepStatus("Apoio cadastral; nao altera o calculo do valor.");
+    return;
+  }
+  cepLookupTimer = setTimeout(lookupCep, 450);
 }
 
 function normalizeText(value) {
@@ -829,6 +900,12 @@ function buildReportReview() {
 
   if (fields.state.value.trim() && !/^[A-Za-z]{2}$/.test(fields.state.value.trim())) {
     add("critical", "UF invalida", "Use a sigla da unidade federativa com duas letras.", "#avaliando");
+  }
+  const informedCep = fields.postalCode.value.trim();
+  if (informedCep && cepDigits(informedCep).length !== 8) {
+    add("warning", "CEP incompleto", "Informe os oito digitos para validar endereco, municipio, UF e codigo IBGE.", "#avaliando");
+  } else if (informedCep && !fields.ibgeCode.value.trim()) {
+    add("warning", "CEP sem validacao territorial", "Consulte o CEP ou confirme manualmente os dados de localizacao do imovel.", "#avaliando");
   }
 
   if (!fields.registrationNumber.value.trim() || !fields.registryOffice.value.trim()) {
@@ -1402,6 +1479,9 @@ function applyProjectData(project, imported = false) {
     state.error = error.message;
   }
   updateAll();
+  setCepStatus(fields.ibgeCode.value.trim()
+    ? "Dados territoriais carregados do projeto. Confira numero e complemento."
+    : "Apoio cadastral; nao altera o calculo do valor.", fields.ibgeCode.value.trim() ? "ok" : "");
   setProjectStatus(imported ? "Projeto importado. Salve para inclui-lo na lista local." : `Projeto "${projectName.value}" aberto.`, imported ? "warn" : "ok");
   renderProjectList();
 }
@@ -1449,6 +1529,7 @@ function newBlankProject() {
   renderVariableControls();
   renderSamples();
   updateAll();
+  setCepStatus("Apoio cadastral; nao altera o calculo do valor.");
   setProjectStatus("Novo projeto iniciado. Preencha os dados e salve.", "warn");
   renderProjectList();
   location.hash = "os";
@@ -1509,7 +1590,7 @@ function renderFormalReportPages(r, reportEquation) {
               <tbody>
                 <tr><th>Endereco</th><td>${fields.address.value || blank}</td><th>Numero</th><td>${reportValue("addressNumber")}</td></tr>
                 <tr><th>Complemento</th><td>${reportValue("addressComplement")}</td><th>Bairro / Setor</th><td>${reportValue("neighborhood")}</td></tr>
-                <tr><th>Cidade</th><td>${fields.city.value || blank}</td><th>UF / CEP</th><td>${fields.state.value || blank} / ${reportValue("postalCode")}</td></tr>
+                <tr><th>Cidade / UF</th><td>${fields.city.value || blank} / ${fields.state.value || blank}</td><th>CEP / Codigo IBGE</th><td>${reportValue("postalCode")} / ${reportValue("ibgeCode")}</td></tr>
                 <tr><th>Condominio / empreendimento</th><td>${reportValue("condominiumName")}</td><th>Matricula</th><td>${reportValue("registrationNumber")}</td></tr>
                 <tr><th>Cartorio / Oficio</th><td>${reportValue("registryOffice")}</td><th>Data emissao matricula</th><td>${reportValue("registrationDate")}</td></tr>
                 <tr><th>Observacoes</th><td colspan="3">${reportValue("propertyNotes")}</td></tr>
@@ -1918,6 +1999,7 @@ function loadSample() {
     addressComplement: "CASA",
     neighborhood: "CENTRO",
     postalCode: "44905-000",
+    ibgeCode: "2919157",
     condominiumName: "NAO SE APLICA",
     registrationNumber: "00000",
     registryOffice: "CARTORIO DE REGISTRO DE IMOVEIS",
@@ -2014,6 +2096,7 @@ function loadSample() {
   state.activeProjectId = null;
   state.projectDirty = true;
   projectName.value = `Laudo exemplo - ${fields.osNumber.value}`;
+  setCepStatus("CEP e codigo IBGE carregados no exemplo. Confira os dados antes do uso.", "ok");
   setProjectStatus("Exemplo carregado. Salve para manter este projeto.", "warn");
   renderSamples();
   updateAll();
@@ -2076,6 +2159,14 @@ function downloadSampleTemplate() {
   link.download = "modelo-amostras-sisavalia.csv";
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadExcelTemplate() {
+  const link = document.createElement("a");
+  link.href = "assets/modelo-amostras-sisavalia.xlsx";
+  link.download = "Modelo_Amostras_SISAVALIA.xlsx";
+  link.click();
+  setImportStatus("Modelo Excel baixado. Ao concluir, salve uma copia em CSV UTF-8 para importar.", "ok");
 }
 
 function setExportStatus(message, status = "") {
@@ -2187,10 +2278,16 @@ Object.entries(fields).forEach(([key, field]) => {
 });
 
 projectName.addEventListener("input", markProjectDirty);
+fields.postalCode.addEventListener("input", scheduleCepLookup);
+fields.postalCode.addEventListener("blur", () => {
+  if (cepDigits().length === 8) lookupCep();
+});
+lookupCepBtn.addEventListener("click", lookupCep);
 
 document.querySelector("#addSampleBtn").addEventListener("click", () => addSample());
 document.querySelector("#importSamplesBtn").addEventListener("click", importSamplesFromFile);
 document.querySelector("#downloadTemplateBtn").addEventListener("click", downloadSampleTemplate);
+document.querySelector("#downloadExcelTemplateBtn").addEventListener("click", downloadExcelTemplate);
 document.querySelector("#clearSamplesBtn").addEventListener("click", () => {
   state.samples = [];
   state.result = null;

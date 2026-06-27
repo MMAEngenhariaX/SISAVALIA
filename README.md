@@ -17,6 +17,7 @@ O repositorio inclui `render.yaml` para criar um site estatico no Render. No pai
 - Cadastro de Ordem de Servico.
 - Cadastro completo e editavel do imovel avaliando, documentacao, terreno, edificacao, vistoria, mercado e conclusao.
 - Campos principais do avaliando para quartos, suites, banheiros e vagas.
+- Consulta automatica de CEP para preencher logradouro, bairro, municipio, UF e codigo IBGE, sem interferencia direta no valor calculado.
 - Cadastro manual de amostras de mercado.
 - Importacao de amostras por CSV/TSV exportado do Excel.
 - Regressao linear multipla sobre `ln(valor unitario)`.
@@ -42,6 +43,8 @@ Os textos extraidos dos PDFs ficam em `tmp/pdfs/extracted/` para consulta durant
 ## Importacao de amostras
 
 Na secao `Amostras de Mercado`, use `Modelo CSV` para baixar uma planilha-base. O importador aceita CSV/TSV com as colunas:
+
+O comando `Modelo Excel` baixa uma planilha `.xlsx` formatada e validada com essas mesmas seis colunas. Depois do preenchimento, salve uma copia como `CSV UTF-8` para importar no sistema.
 
 - `fonte`
 - `preco`
@@ -84,6 +87,8 @@ Na secao `Previa do Laudo`, o sistema consolida verificacoes cadastrais, coerenc
 ## Campos do laudo
 
 Na secao `Imovel Avaliando`, os grupos expansiveis permitem editar os campos formais exibidos nas paginas do laudo. Alteracoes cadastrais e descritivas atualizam a previa sem apagar o modelo. Alteracoes em area construida, localizacao, padrao ou conservacao invalidam o resultado anterior e exigem novo calculo.
+
+O campo `CEP`, em `Identificacao e documentacao`, consulta o servico ViaCEP ao completar oito digitos. Os dados retornados permanecem editaveis para conferencia do avaliador e servem somente como apoio cadastral e territorial.
 
 ## Exportacao em PDF
 

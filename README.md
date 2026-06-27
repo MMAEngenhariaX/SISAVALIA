@@ -23,6 +23,7 @@ O repositorio inclui `render.yaml` para criar um site estatico no Render. No pai
 - Regressao linear multipla sobre `ln(valor unitario)`.
 - Selecao de variaveis independentes e transformacoes (`x`, `ln(x)`, `1/x`, `sqrt(x)`, `x²`).
 - Diagnostico estatistico auxiliar: normalidade, outliers, multicolinearidade, significancia, micronumerosidade e status geral.
+- Exclusao controlada e registrada de variaveis sem variacao ou com dependencia linear exata, evitando falha por matriz singular.
 - Calculo de valor unitario, valor total, intervalo de confianca de 80% e graus estimados.
 - Checklist inicial ABNT/SisAvalia.
 - Revisao automatica do laudo com pendencias criticas, alertas tecnicos, conferencias manuais e atalhos de correcao.

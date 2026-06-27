@@ -424,8 +424,8 @@ function parseSamplesFile(text) {
   const headers = rows[0];
   const indexes = {
     source: findColumn(headers, ["fonte", "endereco", "endereço", "fonte/endereco", "fonte endereco", "informante", "descricao"]),
-    price: findColumn(headers, ["preco", "preço", "valor", "valor total", "valor de oferta", "valor venda", "preco total"]),
-    area: findColumn(headers, ["area", "área", "area construida", "área construída", "area privativa", "area referencia", "m2"]),
+    price: findColumn(headers, ["preco", "preço", "preco (r$)", "preço (r$)", "valor", "valor (r$)", "valor total", "valor de oferta", "valor venda", "preco total"]),
+    area: findColumn(headers, ["area", "área", "area (m2)", "área (m2)", "área (m²)", "area construida", "área construída", "area privativa", "area referencia", "m2"]),
     location: findColumn(headers, ["local", "localizacao", "localização", "situacao", "bairro", "nota local"]),
     standard: findColumn(headers, ["padrao", "padrão", "padrao construtivo", "acabamento", "nota padrao"]),
     conservation: findColumn(headers, ["conservacao", "conservação", "estado conservacao", "estado", "nota conservacao"]),
@@ -446,7 +446,7 @@ function parseSamplesFile(text) {
   const conservationMap = [
     [["regular", "ruim", "baixo"], 1],
     [["bom", "boa", "medio", "media", "normal"], 2],
-    [["novo", "otimo", "otima", "excelente"], 3],
+    [["novo", "otimo", "otima", "excelente", "lancamento"], 3],
   ];
   return rows.slice(1).map((row, index) => ({
     source: row[indexes.source] || `Amostra importada ${index + 1}`,
@@ -698,11 +698,54 @@ function createDiagnostics({ valid, n, k, pValues, standardizedResiduals, correl
   };
 }
 
+function selectEstimableVariables(valid, variables) {
+  const n = valid.length;
+  if (!n) return { variables: [], excluded: [] };
+  const basis = [Array(n).fill(1 / Math.sqrt(n))];
+  const selected = [];
+  const excluded = [];
+
+  variables.forEach((variable) => {
+    const values = valid.map((sample) => applyTransform(variable.sampleValue(sample), variable.config.transform));
+    const residual = [...values];
+    basis.forEach((vector) => {
+      const projection = residual.reduce((sum, value, index) => sum + value * vector[index], 0);
+      residual.forEach((value, index) => {
+        residual[index] = value - projection * vector[index];
+      });
+    });
+    const residualNorm = Math.sqrt(residual.reduce((sum, value) => sum + value * value, 0));
+    const originalNorm = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0));
+    const distinctValues = new Set(values.map((value) => number(value, 10))).size;
+    if (residualNorm <= 1e-9 * Math.max(originalNorm, 1)) {
+      excluded.push({
+        key: variable.key,
+        label: variable.label,
+        reason: distinctValues <= 1 ? "sem variacao na amostra" : "dependencia linear com outras variaveis",
+      });
+      return;
+    }
+    basis.push(residual.map((value) => value / residualNorm));
+    selected.push(variable);
+  });
+
+  return { variables: selected, excluded };
+}
+
 function runRegression() {
-  const activeVariables = activeModelVariables();
-  if (!activeVariables.length) throw new Error("Selecione pelo menos uma variavel independente.");
+  const configuredVariables = activeModelVariables();
+  if (!configuredVariables.length) throw new Error("Selecione pelo menos uma variavel independente.");
+  if (numeric(fields.builtArea.value) <= 0) {
+    throw new Error("Informe a area construida do imovel avaliando antes de calcular o modelo.");
+  }
   const rawValid = state.samples.filter((s) => s.price > 0 && s.area > 0);
-  const valid = rawValid.filter((sample) => activeVariables.every((variable) => Number.isFinite(applyTransform(variable.sampleValue(sample), variable.config.transform))));
+  const valid = rawValid.filter((sample) => configuredVariables.every((variable) => Number.isFinite(applyTransform(variable.sampleValue(sample), variable.config.transform))));
+  const estimable = selectEstimableVariables(valid, configuredVariables);
+  const activeVariables = estimable.variables;
+  const excludedVariables = estimable.excluded;
+  if (!activeVariables.length) {
+    throw new Error("As variaveis selecionadas nao apresentam variacao suficiente para estimar o modelo.");
+  }
   const y = valid.map((s) => Math.log(s.price / s.area));
   const x = valid.map((sample) => [1, ...activeVariables.map((variable) => applyTransform(variable.sampleValue(sample), variable.config.transform))]);
   if (valid.length <= activeVariables.length + 1) {
@@ -775,6 +818,7 @@ function runRegression() {
     variableNames,
     correlations,
     activeVariables,
+    excludedVariables,
     diagnostics,
     foundation: classifyFoundation(n, k, pValues),
     precision: classifyPrecision(amplitude),
@@ -871,6 +915,38 @@ function renderChecks() {
   text.textContent = failures ? `${failures} pendencias criticas` : warnings ? `${warnings} alertas tecnicos` : "Pronto para revisao";
 }
 
+function failedDiagnosticsSummary(diagnostics) {
+  const failures = [];
+
+  if (diagnostics.normality.status === "fail") {
+    failures.push(`normalidade (desvio maximo ${pct(diagnostics.normality.maxDeviation)})`);
+  }
+  if (diagnostics.outliers.status === "fail") {
+    failures.push(`outliers (${diagnostics.outliers.above3.length} residuo(s) acima de |3|)`);
+  }
+  if (diagnostics.multicollinearity.status === "fail") {
+    const pairs = diagnostics.multicollinearity.highCorrelations
+      .filter((item) => Math.abs(item.value) >= 0.9)
+      .map((item) => `${item.a} x ${item.b}`)
+      .join(", ");
+    failures.push(`multicolinearidade${pairs ? ` (${pairs})` : ""}`);
+  }
+  if (diagnostics.significance.status === "fail") {
+    const variables = diagnostics.significance.variables
+      .filter((item) => item.pValue > 0.3)
+      .map((item) => `${item.name}: p=${pct(item.pValue * 100)}`)
+      .join(", ");
+    failures.push(`significancia${variables ? ` (${variables})` : ""}`);
+  }
+  if (diagnostics.micronumerosity.status === "fail") {
+    failures.push(`micronumerosidade (${diagnostics.micronumerosity.n} dados para ${diagnostics.micronumerosity.k} variaveis)`);
+  }
+
+  return failures.length
+    ? `Falha em: ${failures.join("; ")}. Abra os cartoes de diagnostico para a analise completa.`
+    : "Ha teste(s) com falha. Analise os cartoes de diagnostico antes de emitir.";
+}
+
 function buildReportReview() {
   const r = state.result;
   const validSamples = state.samples.filter((sample) => sample.price > 0 && sample.area > 0);
@@ -946,8 +1022,11 @@ function buildReportReview() {
   } else {
     if (r.foundation === "Nao enquadrado") add("critical", "Fundamentacao nao enquadrada", "O modelo nao atingiu os criterios minimos usados na classificacao de fundamentacao.", "#modelo");
     if (!Number.isFinite(r.adjR2) || r.adjR2 < 0.7) add("warning", "Poder explicativo reduzido", `O R2 ajustado e ${number(r.adjR2, 3)}. Revise variaveis, dados e especificacao do modelo.`, "#modelo");
-    if (r.diagnostics.overall === "fail") add("critical", "Diagnostico estatistico reprovado", "Ha teste(s) com falha. Analise os cartoes de diagnostico antes de emitir.", "#modelo");
+    if (r.diagnostics.overall === "fail") add("critical", "Diagnostico estatistico reprovado", failedDiagnosticsSummary(r.diagnostics), "#modelo");
     else if (r.diagnostics.overall === "warn") add("warning", "Diagnostico estatistico com ressalvas", "Ha alerta(s) de normalidade, outliers, correlacao ou significancia a justificar.", "#modelo");
+    if (r.excludedVariables.length) {
+      add("warning", "Variavel excluida automaticamente", r.excludedVariables.map((item) => `${item.label}: ${item.reason}`).join("; "), "#modelo");
+    }
     if (!Number.isFinite(r.value) || r.value <= 0) add("critical", "Valor de avaliacao invalido", "O modelo nao produziu valor positivo e finito.", "#modelo");
   }
 
@@ -1025,6 +1104,13 @@ function renderDiagnostics() {
   diagnosticSummary.textContent = diagnosticLabel(d.overall);
   diagnosticSummary.className = `pill ${d.overall === "ok" ? "" : d.overall}`.trim();
   diagnosticCards.innerHTML = [
+    ...(r.excludedVariables.length ? [renderDiagnosticCard(
+      "Variaveis Excluidas",
+      "warn",
+      `${r.excludedVariables.length} exclusao(oes) automatica(s)`,
+      "Variaveis sem variacao ou linearmente dependentes nao participam da regressao.",
+      r.excludedVariables.map((item) => `${item.label}: ${item.reason}`),
+    )] : []),
     renderDiagnosticCard(
       "Normalidade",
       d.normality.status,
@@ -1089,6 +1175,9 @@ function renderModelReport() {
     `Micronumerosidade: n=${d.micronumerosity.n}; minimos grau III=${d.micronumerosity.gradeIII}, II=${d.micronumerosity.gradeII}, I=${d.micronumerosity.gradeI}`,
     `Diagnostico geral: ${diagnosticLabel(d.overall)}`,
   ].join("\n");
+  const excludedLine = r.excludedVariables.length
+    ? r.excludedVariables.map((item) => `${item.label} (${item.reason})`).join("; ")
+    : "Nenhuma";
   modelReport.textContent = [
     `MODELO: ln(VALOR_UNITARIO) = b0${equationTerms ? ` + ${equationTerms}` : ""}`,
     "",
@@ -1096,6 +1185,7 @@ function renderModelReport() {
     "",
     `Dados utilizados: ${r.n}`,
     `Variaveis independentes: ${r.k}`,
+    `Variaveis excluidas automaticamente: ${excludedLine}`,
     `R2 ajustado: ${number(r.adjR2, 4)}`,
     `Amplitude IC 80%: ${number(r.amplitude, 2)}%`,
     `Grau de fundamentacao estimado: ${r.foundation}`,
@@ -1320,6 +1410,7 @@ function reportDiagnosticsRows(result) {
     <tr><th>Multicolinearidade</th><td>${d.multicollinearity.highCorrelations.length} correlacao(oes) com |r| >= 0,80</td></tr>
     <tr><th>Significancia</th><td>p maximo ${pct(d.significance.maxP)} - ${diagnosticLabel(d.significance.status)}</td></tr>
     <tr><th>Micronumerosidade</th><td>n=${d.micronumerosity.n}; minimos: III=${d.micronumerosity.gradeIII}, II=${d.micronumerosity.gradeII}, I=${d.micronumerosity.gradeI}</td></tr>
+    <tr><th>Variaveis excluidas</th><td>${result.excludedVariables.length ? result.excludedVariables.map((item) => `${item.label}: ${item.reason}`).join("; ") : "Nenhuma"}</td></tr>
     <tr><th>Geral</th><td>${diagnosticLabel(d.overall)}</td></tr>
   `;
 }

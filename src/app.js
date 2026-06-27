@@ -154,6 +154,15 @@ const importStatus = document.querySelector("#importStatus");
 const lookupCepBtn = document.querySelector("#lookupCepBtn");
 const cepStatus = document.querySelector("#cepStatus");
 const variableControls = document.querySelector("#variableControls");
+const modelTarget = document.querySelector("#modelTarget");
+const foundationControls = {
+  characterization: document.querySelector("#foundationCharacterization"),
+  collection: document.querySelector("#foundationCollection"),
+  identification: document.querySelector("#foundationIdentification"),
+};
+const foundationRows = document.querySelector("#foundationRows");
+const foundationSummary = document.querySelector("#foundationSummary");
+const foundationNote = document.querySelector("#foundationNote");
 const chartCanvases = {
   adherence: document.querySelector("#adherenceChart"),
   residual: document.querySelector("#residualChart"),
@@ -202,10 +211,22 @@ function defaultModelConfig() {
   };
 }
 
+function defaultFoundationInputs() {
+  return { characterization: 0, collection: 0, identification: 0 };
+}
+
+function syncFoundationControls() {
+  Object.entries(foundationControls).forEach(([key, control]) => {
+    control.value = String(state.foundationInputs[key] || 0);
+  });
+}
+
 const state = {
   samples: [],
   result: null,
   error: "",
+  modelTarget: "unit",
+  foundationInputs: defaultFoundationInputs(),
   modelConfig: defaultModelConfig(),
   activeProjectId: null,
   projectDirty: false,
@@ -216,6 +237,7 @@ const modelVariables = [
     key: "area",
     label: "Area",
     hint: "Area da amostra em m2",
+    encoding: "quantitative",
     sampleValue: (sample) => sample.area,
     subjectValue: () => numeric(fields.builtArea.value),
   },
@@ -223,6 +245,7 @@ const modelVariables = [
     key: "location",
     label: "Local",
     hint: "Nota 1 a 3 de localizacao",
+    encoding: "allocated",
     sampleValue: (sample) => sample.location,
     subjectValue: () => numeric(fields.locationScore.value),
   },
@@ -230,6 +253,7 @@ const modelVariables = [
     key: "standard",
     label: "Padrao",
     hint: "Nota 1 a 3 de padrao construtivo",
+    encoding: "allocated",
     sampleValue: (sample) => sample.standard,
     subjectValue: () => numeric(fields.standard.value),
   },
@@ -237,6 +261,7 @@ const modelVariables = [
     key: "conservation",
     label: "Conservacao",
     hint: "Nota 1 a 3 de estado de conservacao",
+    encoding: "allocated",
     sampleValue: (sample) => sample.conservation,
     subjectValue: () => numeric(fields.conservation.value),
   },
@@ -619,6 +644,83 @@ function normalCdf(x) {
   return 0.5 * (1 + erf(x / Math.sqrt(2)));
 }
 
+function logGamma(value) {
+  const coefficients = [
+    676.5203681218851,
+    -1259.1392167224028,
+    771.3234287776531,
+    -176.6150291621406,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.984369578019572e-6,
+    1.5056327351493116e-7,
+  ];
+  if (value < 0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * value)) - logGamma(1 - value);
+  let x = 0.9999999999998099;
+  const z = value - 1;
+  coefficients.forEach((coefficient, index) => {
+    x += coefficient / (z + index + 1);
+  });
+  const t = z + coefficients.length - 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+
+function betaContinuedFraction(a, b, x) {
+  const maxIterations = 200;
+  const epsilon = 3e-12;
+  const minimum = 1e-30;
+  const qab = a + b;
+  const qap = a + 1;
+  const qam = a - 1;
+  let c = 1;
+  let d = 1 - qab * x / qap;
+  if (Math.abs(d) < minimum) d = minimum;
+  d = 1 / d;
+  let result = d;
+
+  for (let m = 1; m <= maxIterations; m += 1) {
+    const m2 = 2 * m;
+    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < minimum) d = minimum;
+    c = 1 + aa / c;
+    if (Math.abs(c) < minimum) c = minimum;
+    d = 1 / d;
+    result *= d * c;
+
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < minimum) d = minimum;
+    c = 1 + aa / c;
+    if (Math.abs(c) < minimum) c = minimum;
+    d = 1 / d;
+    const delta = d * c;
+    result *= delta;
+    if (Math.abs(delta - 1) < epsilon) break;
+  }
+  return result;
+}
+
+function regularizedBeta(x, a, b) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const factor = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+  if (x < (a + 1) / (a + b + 2)) return factor * betaContinuedFraction(a, b, x) / a;
+  return 1 - factor * betaContinuedFraction(b, a, 1 - x) / b;
+}
+
+function studentTwoTailedP(tValue, degreesOfFreedom) {
+  if (!Number.isFinite(tValue) || degreesOfFreedom <= 0) return 1;
+  const x = degreesOfFreedom / (degreesOfFreedom + tValue * tValue);
+  return regularizedBeta(x, degreesOfFreedom / 2, 0.5);
+}
+
+function fSurvival(fValue, numeratorDf, denominatorDf) {
+  if (!Number.isFinite(fValue) || fValue < 0 || numeratorDf <= 0 || denominatorDf <= 0) return 1;
+  const x = denominatorDf / (denominatorDf + numeratorDf * fValue);
+  return regularizedBeta(x, denominatorDf / 2, numeratorDf / 2);
+}
+
 function correlation(a, b) {
   const meanA = a.reduce((sum, value) => sum + value, 0) / a.length;
   const meanB = b.reduce((sum, value) => sum + value, 0) / b.length;
@@ -648,7 +750,7 @@ function significanceGrade(pValue) {
   return "Nao atende";
 }
 
-function createDiagnostics({ valid, n, k, pValues, standardizedResiduals, correlations, variableNames }) {
+function createDiagnostics({ valid, n, k, pValues, standardizedResiduals, correlations, variableNames, modelF, modelP }) {
   const absResiduals = standardizedResiduals.map(Math.abs);
   const within1 = standardizedResiduals.filter((value) => Math.abs(value) <= 1).length / n * 100;
   const within164 = standardizedResiduals.filter((value) => Math.abs(value) <= 1.64).length / n * 100;
@@ -686,14 +788,16 @@ function createDiagnostics({ valid, n, k, pValues, standardizedResiduals, correl
     gradeI: 3 * (k + 1),
   };
   const micronumStatus = n >= micro.gradeII ? "ok" : n >= micro.gradeI ? "warn" : "fail";
+  const modelStatus = modelP <= 0.05 ? "ok" : modelP <= 0.1 ? "warn" : "fail";
 
-  const overall = worstStatus([normalStatus, outlierStatus, multicolStatus, significanceStatus, micronumStatus]);
+  const overall = worstStatus([normalStatus, outlierStatus, multicolStatus, significanceStatus, micronumStatus, modelStatus]);
   return {
     overall,
     normality: { status: normalStatus, within1, within164, within196, maxDeviation: normalDiff },
     outliers: { status: outlierStatus, above2: outliers2, above3: outliers3 },
     multicollinearity: { status: multicolStatus, highCorrelations },
     significance: { status: significanceStatus, maxP, variables: significance },
+    modelSignificance: { status: modelStatus, fValue: modelF, pValue: modelP },
     micronumerosity: { status: micronumStatus, n, k, ...micro },
   };
 }
@@ -746,7 +850,8 @@ function runRegression() {
   if (!activeVariables.length) {
     throw new Error("As variaveis selecionadas nao apresentam variacao suficiente para estimar o modelo.");
   }
-  const y = valid.map((s) => Math.log(s.price / s.area));
+  const targetType = state.modelTarget === "total" ? "total" : "unit";
+  const y = valid.map((s) => Math.log(targetType === "total" ? s.price : s.price / s.area));
   const x = valid.map((sample) => [1, ...activeVariables.map((variable) => applyTransform(variable.sampleValue(sample), variable.config.transform))]);
   if (valid.length <= activeVariables.length + 1) {
     throw new Error("A amostra valida e insuficiente para a quantidade de variaveis selecionadas.");
@@ -770,31 +875,39 @@ function runRegression() {
   const adjR2 = 1 - (1 - r2) * ((n - 1) / Math.max(n - p, 1));
   const standardErrors = xtxInv.map((row, i) => Math.sqrt(Math.max(row[i] * mse, 0)));
   const tStats = beta.map((b, i) => b / (standardErrors[i] || Infinity));
-  const pValues = tStats.map((t) => 2 * (1 - normalCdf(Math.abs(t))));
+  const pValues = tStats.map((t) => studentTwoTailedP(t, df));
+  const modelF = k > 0 && mse > 0 ? ((sst - sse) / k) / mse : 0;
+  const modelP = fSurvival(modelF, k, df);
   const residualStd = Math.sqrt(mse);
   const standardizedResiduals = residuals.map((value) => value / (residualStd || 1));
   const observedUnits = valid.map((s) => s.price / s.area);
-  const fittedUnits = fitted.map((value) => Math.exp(value));
+  const fittedTargets = fitted.map((value) => Math.exp(value));
+  const fittedUnits = fittedTargets.map((value, index) => targetType === "total" ? value / valid[index].area : value);
   const variableNames = activeVariables.map((variable) => `${transformLabel(variable.config.transform).replace("x", variable.label.toUpperCase())}`);
   const variableColumns = activeVariables.map((variable) => valid.map((sample) => applyTransform(variable.sampleValue(sample), variable.config.transform)));
   const correlations = variableColumns.map((colA) => variableColumns.map((colB) => correlation(colA, colB)));
-  const diagnostics = createDiagnostics({ valid, n, k, pValues, standardizedResiduals, correlations, variableNames });
+  const diagnostics = createDiagnostics({ valid, n, k, pValues, standardizedResiduals, correlations, variableNames, modelF, modelP });
   const subject = [1, ...activeVariables.map((variable) => applyTransform(variable.subjectValue(), variable.config.transform))];
   if (subject.some((value) => !Number.isFinite(value))) {
     throw new Error("Os atributos do avaliando nao atendem as transformacoes escolhidas.");
   }
-  const logUnit = subject.reduce((sum, value, i) => sum + value * beta[i], 0);
+  const logTarget = subject.reduce((sum, value, i) => sum + value * beta[i], 0);
   const leverage = multiply(multiply([subject], xtxInv), subject.map((v) => [v]))[0][0];
   const predictionSe = Math.sqrt(Math.max(mse * (1 + leverage), 0));
   const z80 = 1.2815515655446004;
-  const unit = Math.exp(logUnit);
-  const lowerUnit = Math.exp(logUnit - z80 * predictionSe);
-  const upperUnit = Math.exp(logUnit + z80 * predictionSe);
   const area = Math.max(numeric(fields.builtArea.value), 0);
-  const value = unit * area;
-  const lower = lowerUnit * area;
-  const upper = upperUnit * area;
+  const targetEstimate = Math.exp(logTarget);
+  const lowerTarget = Math.exp(logTarget - z80 * predictionSe);
+  const upperTarget = Math.exp(logTarget + z80 * predictionSe);
+  const value = targetType === "total" ? targetEstimate : targetEstimate * area;
+  const lower = targetType === "total" ? lowerTarget : lowerTarget * area;
+  const upper = targetType === "total" ? upperTarget : upperTarget * area;
+  const unit = area > 0 ? value / area : NaN;
   const amplitude = value > 0 ? ((upper - lower) / value) * 100 : Infinity;
+  const extrapolation = assessExtrapolation({ valid, activeVariables, subject, beta, targetType, area, estimatedValue: value });
+  const foundationAssessment = buildFoundationAssessment({ n, k, pValues, modelF, modelP, extrapolation, activeVariables });
+  const rawPrecision = classifyPrecision(amplitude);
+  const precision = foundationAssessment.usesAllocatedCodes && rawPrecision === "III" ? "II" : rawPrecision;
 
   return {
     valid,
@@ -807,6 +920,9 @@ function runRegression() {
     adjR2,
     mse,
     pValues,
+    modelF,
+    modelP,
+    targetType,
     value,
     unit,
     lower,
@@ -820,20 +936,128 @@ function runRegression() {
     activeVariables,
     excludedVariables,
     diagnostics,
-    foundation: classifyFoundation(n, k, pValues),
-    precision: classifyPrecision(amplitude),
+    extrapolation,
+    foundationAssessment,
+    foundation: foundationAssessment.label,
+    rawPrecision,
+    precision,
+    precisionCapped: precision !== rawPrecision,
   };
 }
 
-function classifyFoundation(n, k, pValues) {
-  const maxP = Math.max(...pValues.slice(1)) * 100;
-  const hasN3 = n >= 6 * (k + 1) && maxP <= 10;
-  const hasN2 = n >= 4 * (k + 1) && maxP <= 20;
-  const hasN1 = n >= 3 * (k + 1) && maxP <= 30;
-  if (hasN3) return "III";
-  if (hasN2) return "II";
-  if (hasN1) return "I";
-  return "Nao enquadrado";
+function gradeLabel(grade) {
+  return grade === 3 ? "III" : grade === 2 ? "II" : grade === 1 ? "I" : "Nao atende";
+}
+
+function thresholdGrade(value, gradeIII, gradeII, gradeI, lowerIsBetter = true) {
+  if (lowerIsBetter) {
+    if (value <= gradeIII) return 3;
+    if (value <= gradeII) return 2;
+    if (value <= gradeI) return 1;
+  } else {
+    if (value >= gradeIII) return 3;
+    if (value >= gradeII) return 2;
+    if (value >= gradeI) return 1;
+  }
+  return 0;
+}
+
+function foundationInputEvidence(key, grade) {
+  const labels = {
+    characterization: {
+      3: "Completa quanto a todas as variaveis analisadas.",
+      2: "Completa quanto as variaveis utilizadas no modelo.",
+      1: "Situacao paradigma adotada.",
+    },
+    collection: {
+      3: "Caracteristicas conferidas pelo autor do laudo.",
+      2: "Caracteristicas conferidas por profissional credenciado.",
+      1: "Caracteristicas fornecidas por terceiros.",
+    },
+    identification: {
+      3: "Todos os dados e variaveis analisados identificados, com fotos.",
+      2: "Dados e variaveis efetivamente utilizados identificados.",
+      1: "Identificacao minima dos dados utilizados.",
+    },
+  };
+  return labels[key][grade] || "Evidencia ainda nao informada pelo avaliador.";
+}
+
+function assessExtrapolation({ valid, activeVariables, subject, beta, targetType, area, estimatedValue }) {
+  const occurrences = activeVariables.flatMap((variable, index) => {
+    const values = valid.map((sample) => numeric(variable.sampleValue(sample))).filter(Number.isFinite);
+    const subjectValue = numeric(variable.subjectValue());
+    const minimum = Math.min(...values);
+    const maximum = Math.max(...values);
+    if (subjectValue >= minimum && subjectValue <= maximum) return [];
+
+    const boundaryValue = Math.min(Math.max(subjectValue, minimum), maximum);
+    const boundarySubject = [...subject];
+    boundarySubject[index + 1] = applyTransform(boundaryValue, variable.config.transform);
+    const boundaryLogTarget = boundarySubject.reduce((sum, value, coefficientIndex) => sum + value * beta[coefficientIndex], 0);
+    const boundaryTarget = Math.exp(boundaryLogTarget);
+    const boundaryEstimate = targetType === "total" ? boundaryTarget : boundaryTarget * area;
+    const measureWithinLimit = subjectValue >= minimum / 2 && subjectValue <= maximum * 2;
+    const valueDifference = boundaryEstimate > 0 ? Math.abs(estimatedValue - boundaryEstimate) / boundaryEstimate * 100 : Infinity;
+
+    return [{
+      variable: variable.label,
+      subjectValue,
+      minimum,
+      maximum,
+      boundaryEstimate,
+      valueDifference,
+      acceptable: measureWithinLimit && valueDifference <= 10,
+    }];
+  });
+
+  const allAcceptable = occurrences.every((item) => item.acceptable);
+  const grade = occurrences.length === 0 ? 3 : !allAcceptable ? 0 : occurrences.length === 1 ? 2 : 1;
+  return { grade, occurrences, allAcceptable };
+}
+
+function buildFoundationAssessment({ n, k, pValues, modelF, modelP, extrapolation, activeVariables }) {
+  const inputs = state.foundationInputs;
+  const sampleGrade = thresholdGrade(n, 6 * (k + 1), 4 * (k + 1), 3 * (k + 1), false);
+  const maxRegressorP = Math.max(...pValues.slice(1)) * 100;
+  const regressorGrade = thresholdGrade(maxRegressorP, 10, 20, 30);
+  const modelTestGrade = thresholdGrade(modelP * 100, 1, 5, 10);
+  const extrapolationEvidence = extrapolation.occurrences.length
+    ? extrapolation.occurrences.map((item) => `${item.variable}: ${number(item.subjectValue)} fora de ${number(item.minimum)} a ${number(item.maximum)}; diferenca na fronteira ${number(item.valueDifference, 1)}%`).join("; ")
+    : "Avaliando contido nos limites amostrais de todas as variaveis.";
+
+  const items = [
+    { item: 1, criterion: "Caracterizacao do imovel avaliando", grade: inputs.characterization, evidence: foundationInputEvidence("characterization", inputs.characterization) },
+    { item: 2, criterion: "Coleta de dados de mercado", grade: inputs.collection, evidence: foundationInputEvidence("collection", inputs.collection) },
+    { item: 3, criterion: "Quantidade minima de dados", grade: sampleGrade, evidence: `${n} dados para ${k} variaveis; minimos III=${6 * (k + 1)}, II=${4 * (k + 1)}, I=${3 * (k + 1)}.` },
+    { item: 4, criterion: "Identificacao dos dados de mercado", grade: inputs.identification, evidence: foundationInputEvidence("identification", inputs.identification) },
+    { item: 5, criterion: "Extrapolacao", grade: extrapolation.grade, evidence: extrapolationEvidence },
+    { item: 6, criterion: "Significancia de cada regressor", grade: regressorGrade, evidence: `Maior p-valor dos regressores: ${pct(maxRegressorP)}.` },
+    { item: 7, criterion: "Significancia dos demais testes", grade: modelTestGrade, evidence: `Teste F global: F=${number(modelF, 3)}; p=${pct(modelP * 100)}.` },
+  ];
+  const points = items.reduce((sum, item) => sum + item.grade, 0);
+  const mandatory = [3, 5, 6, 7].map((number) => items.find((item) => item.item === number));
+  const qualifiesIII = points >= 18 && mandatory.every((item) => item.grade >= 3) && items.filter((item) => ![3, 5, 6, 7].includes(item.item)).every((item) => item.grade >= 2);
+  const qualifiesII = points >= 11 && mandatory.every((item) => item.grade >= 2);
+  const qualifiesI = points >= 7 && items.every((item) => item.grade >= 1);
+  let rawGrade = qualifiesIII ? 3 : qualifiesII ? 2 : qualifiesI ? 1 : 0;
+  const usesAllocatedCodes = activeVariables.some((variable) => variable.encoding === "allocated");
+  const cap = usesAllocatedCodes ? 2 : 3;
+  const capped = rawGrade > cap;
+  rawGrade = Math.min(rawGrade, cap);
+  const pending = [inputs.characterization, inputs.collection, inputs.identification].some((grade) => grade === 0);
+  const finalGrade = pending ? 0 : rawGrade;
+
+  return {
+    items,
+    points,
+    grade: finalGrade,
+    label: pending ? "Pendente" : rawGrade ? gradeLabel(rawGrade) : "Nao enquadrado",
+    pending,
+    usesAllocatedCodes,
+    cap,
+    capped,
+  };
 }
 
 function classifyPrecision(amplitude) {
@@ -868,7 +1092,7 @@ function buildChecks() {
       label: "Micronumerosidade minima ABNT: n >= 3(k+1).",
     },
     {
-      ok: Boolean(result && result.foundation !== "Nao enquadrado"),
+      ok: Boolean(result && ["III", "II", "I"].includes(result.foundation)),
       label: "Modelo enquadrado em grau de fundamentacao pela NBR 14653-2.",
     },
     {
@@ -940,6 +1164,9 @@ function failedDiagnosticsSummary(diagnostics) {
   }
   if (diagnostics.micronumerosity.status === "fail") {
     failures.push(`micronumerosidade (${diagnostics.micronumerosity.n} dados para ${diagnostics.micronumerosity.k} variaveis)`);
+  }
+  if (diagnostics.modelSignificance.status === "fail") {
+    failures.push(`teste F global (p=${pct(diagnostics.modelSignificance.pValue * 100)})`);
   }
 
   return failures.length
@@ -1020,7 +1247,8 @@ function buildReportReview() {
   if (!r || state.error) {
     add("critical", "Modelo inferencial nao validado", state.error ? `Corrija o calculo: ${state.error}` : "Calcule o modelo para gerar valor, intervalo, fundamentacao e diagnosticos.", "#modelo");
   } else {
-    if (r.foundation === "Nao enquadrado") add("critical", "Fundamentacao nao enquadrada", "O modelo nao atingiu os criterios minimos usados na classificacao de fundamentacao.", "#modelo");
+    if (r.foundation === "Pendente") add("critical", "Fundamentacao pendente", "Informe as evidencias dos itens 1, 2 e 4 no quadro de enquadramento normativo.", "#modelo");
+    else if (r.foundation === "Nao enquadrado") add("critical", "Fundamentacao nao enquadrada", "O conjunto de pontos ou os itens obrigatorios nao atingiram os criterios minimos das Tabelas 1 e 2.", "#modelo");
     if (!Number.isFinite(r.adjR2) || r.adjR2 < 0.7) add("warning", "Poder explicativo reduzido", `O R2 ajustado e ${number(r.adjR2, 3)}. Revise variaveis, dados e especificacao do modelo.`, "#modelo");
     if (r.diagnostics.overall === "fail") add("critical", "Diagnostico estatistico reprovado", failedDiagnosticsSummary(r.diagnostics), "#modelo");
     else if (r.diagnostics.overall === "warn") add("warning", "Diagnostico estatistico com ressalvas", "Ha alerta(s) de normalidade, outliers, correlacao ou significancia a justificar.", "#modelo");
@@ -1139,6 +1367,12 @@ function renderDiagnostics() {
       d.significance.variables.map((item) => `${item.name}: ${pct(item.pValue * 100)} (${item.grade})`),
     ),
     renderDiagnosticCard(
+      "Teste F Global",
+      d.modelSignificance.status,
+      `F=${number(d.modelSignificance.fValue, 3)} | p=${pct(d.modelSignificance.pValue * 100)}`,
+      "Teste da hipotese nula global do modelo. Referencias normativas: <=1% grau III, <=5% grau II, <=10% grau I.",
+    ),
+    renderDiagnosticCard(
       "Micronumerosidade",
       d.micronumerosity.status,
       `${d.micronumerosity.n} dados / ${d.micronumerosity.k} variaveis`,
@@ -1153,6 +1387,37 @@ function renderDiagnostics() {
   ].join("");
 }
 
+function renderFoundationAssessment() {
+  const r = state.result;
+  if (!r || state.error) {
+    foundationSummary.textContent = "Aguardando modelo";
+    foundationSummary.className = "pill";
+    foundationRows.innerHTML = "";
+    foundationNote.textContent = "Calcule o modelo e informe as evidencias dos itens 1, 2 e 4.";
+    return;
+  }
+
+  const assessment = r.foundationAssessment;
+  const statusClass = assessment.label === "III" ? "" : ["II", "I"].includes(assessment.label) ? "warn" : "fail";
+  foundationSummary.textContent = `${assessment.label} | ${assessment.points} pontos`;
+  foundationSummary.className = `pill ${statusClass}`.trim();
+  foundationRows.innerHTML = assessment.items.map((item) => `
+    <tr>
+      <td>${item.item}</td>
+      <td>${item.criterion}</td>
+      <td><span class="foundation-grade grade-${item.grade}">${gradeLabel(item.grade)}</span></td>
+      <td>${item.evidence}</td>
+    </tr>
+  `).join("");
+
+  const notes = [];
+  if (assessment.pending) notes.push("Preencha as evidencias dos itens 1, 2 e 4 para concluir o enquadramento.");
+  if (assessment.usesAllocatedCodes) notes.push("O modelo utiliza codigos alocados; fundamentacao e precisao ficam limitadas ao grau II nesta edicao da norma.");
+  if (assessment.capped) notes.push("O grau calculado pela pontuacao foi reduzido pelo limite normativo dos codigos alocados.");
+  if (r.precisionCapped) notes.push(`Precisao bruta ${r.rawPrecision} limitada para ${r.precision}.`);
+  foundationNote.textContent = notes.join(" ") || "Enquadramento calculado pela pontuacao e pelos itens obrigatorios das Tabelas 1 e 2.";
+}
+
 function renderModelReport() {
   if (state.error) {
     modelReport.textContent = `Erro no calculo: ${state.error}`;
@@ -1164,22 +1429,27 @@ function renderModelReport() {
     return;
   }
   const names = ["Intercepto", ...r.variableNames];
-  const coefficients = r.beta.map((b, i) => `${names[i]} = ${number(b, 6)} | p aprox. ${number(r.pValues[i] * 100, 2)}%`).join("\n");
+  const coefficients = r.beta.map((b, i) => `${names[i]} = ${number(b, 6)} | p (teste t) ${number(r.pValues[i] * 100, 2)}%`).join("\n");
   const equationTerms = r.variableNames.map((name, i) => `b${i + 1}*${name}`).join(" + ");
+  const targetLabel = r.targetType === "total" ? "PRECO_TOTAL" : "VALOR_UNITARIO";
   const d = r.diagnostics;
   const diagnosticLines = [
     `Normalidade: ${diagnosticLabel(d.normality.status)} | faixas ${pct(d.normality.within1)}, ${pct(d.normality.within164)}, ${pct(d.normality.within196)}`,
     `Outliers: ${d.outliers.above2.length} acima de |2|; ${d.outliers.above3.length} acima de |3|`,
     `Multicolinearidade: ${d.multicollinearity.highCorrelations.length} correlacao(oes) com |r| >= 0,80`,
     `Significancia: p max. ${pct(d.significance.maxP)} (${diagnosticLabel(d.significance.status)})`,
+    `Teste F global: F=${number(r.modelF, 3)}; p=${pct(r.modelP * 100)}`,
     `Micronumerosidade: n=${d.micronumerosity.n}; minimos grau III=${d.micronumerosity.gradeIII}, II=${d.micronumerosity.gradeII}, I=${d.micronumerosity.gradeI}`,
     `Diagnostico geral: ${diagnosticLabel(d.overall)}`,
   ].join("\n");
   const excludedLine = r.excludedVariables.length
     ? r.excludedVariables.map((item) => `${item.label} (${item.reason})`).join("; ")
     : "Nenhuma";
+  const foundationLines = r.foundationAssessment.items
+    .map((item) => `${item.item}. ${item.criterion}: ${gradeLabel(item.grade)} - ${item.evidence}`)
+    .join("\n");
   modelReport.textContent = [
-    `MODELO: ln(VALOR_UNITARIO) = b0${equationTerms ? ` + ${equationTerms}` : ""}`,
+    `MODELO: ln(${targetLabel}) = b0${equationTerms ? ` + ${equationTerms}` : ""}`,
     "",
     coefficients,
     "",
@@ -1190,6 +1460,11 @@ function renderModelReport() {
     `Amplitude IC 80%: ${number(r.amplitude, 2)}%`,
     `Grau de fundamentacao estimado: ${r.foundation}`,
     `Grau de precisao: ${r.precision}`,
+    `Pontuacao de fundamentacao: ${r.foundationAssessment.points} pontos`,
+    r.foundationAssessment.usesAllocatedCodes ? "Limite normativo: grau II por uso de codigos alocados." : "Limite normativo por codificacao: nao aplicavel.",
+    "",
+    "ENQUADRAMENTO NORMATIVO:",
+    foundationLines,
     "",
     "DIAGNOSTICO ESTATISTICO:",
     diagnosticLines,
@@ -1409,6 +1684,7 @@ function reportDiagnosticsRows(result) {
     <tr><th>Outliers</th><td>${d.outliers.above2.length} acima de |2|; ${d.outliers.above3.length} acima de |3|</td></tr>
     <tr><th>Multicolinearidade</th><td>${d.multicollinearity.highCorrelations.length} correlacao(oes) com |r| >= 0,80</td></tr>
     <tr><th>Significancia</th><td>p maximo ${pct(d.significance.maxP)} - ${diagnosticLabel(d.significance.status)}</td></tr>
+    <tr><th>Teste F global</th><td>F=${number(d.modelSignificance.fValue, 3)}; p=${pct(d.modelSignificance.pValue * 100)}</td></tr>
     <tr><th>Micronumerosidade</th><td>n=${d.micronumerosity.n}; minimos: III=${d.micronumerosity.gradeIII}, II=${d.micronumerosity.gradeII}, I=${d.micronumerosity.gradeI}</td></tr>
     <tr><th>Variaveis excluidas</th><td>${result.excludedVariables.length ? result.excludedVariables.map((item) => `${item.label}: ${item.reason}`).join("; ") : "Nenhuma"}</td></tr>
     <tr><th>Geral</th><td>${diagnosticLabel(d.overall)}</td></tr>
@@ -1482,6 +1758,8 @@ function currentProjectData(id = state.activeProjectId || projectIdentifier()) {
     updatedAt: new Date().toISOString(),
     fields: fieldValues,
     samples: state.samples.map((sample) => ({ ...sample })),
+    modelTarget: state.modelTarget,
+    foundationInputs: { ...state.foundationInputs },
     modelConfig: JSON.parse(JSON.stringify(state.modelConfig)),
   };
 }
@@ -1553,6 +1831,14 @@ function applyProjectData(project, imported = false) {
     conservation: numeric(sample.conservation) || 2,
   }));
   const defaults = defaultModelConfig();
+  state.modelTarget = project.modelTarget === "total" ? "total" : "unit";
+  modelTarget.value = state.modelTarget;
+  const foundationDefaults = defaultFoundationInputs();
+  state.foundationInputs = Object.fromEntries(Object.keys(foundationDefaults).map((key) => [
+    key,
+    Math.max(0, Math.min(3, Number(project.foundationInputs && project.foundationInputs[key]) || 0)),
+  ]));
+  syncFoundationControls();
   state.modelConfig = Object.fromEntries(Object.keys(defaults).map((key) => [
     key,
     { ...defaults[key], ...((project.modelConfig && project.modelConfig[key]) || {}) },
@@ -1611,6 +1897,10 @@ function newBlankProject() {
     else field.value = "";
   });
   state.samples = [];
+  state.modelTarget = "unit";
+  modelTarget.value = state.modelTarget;
+  state.foundationInputs = defaultFoundationInputs();
+  syncFoundationControls();
   state.modelConfig = defaultModelConfig();
   state.result = null;
   state.error = "";
@@ -1852,7 +2142,8 @@ function renderFormalReportPages(r, reportEquation) {
 
 function renderReportPreview() {
   const r = state.result;
-  const reportEquation = r ? `ln(valor unitario) = b0 + ${r.variableNames.map((name, i) => `b${i + 1} ${name}`).join(" + ")}` : "-";
+  const reportTargetLabel = r && r.targetType === "total" ? "preco total" : "valor unitario";
+  const reportEquation = r ? `ln(${reportTargetLabel}) = b0 + ${r.variableNames.map((name, i) => `b${i + 1} ${name}`).join(" + ")}` : "-";
   const chartImages = {
     adherence: chartDataUrl("adherence"),
     residual: chartDataUrl("residual"),
@@ -1909,7 +2200,7 @@ function renderReportPreview() {
 
           <section class="doc-section">
             <h3>4. Metodo e Tratamento</h3>
-            <p>Foi adotado o metodo comparativo direto de dados de mercado, com tratamento por estatistica inferencial sobre o valor unitario. O modelo utiliza ${r ? r.n : "-"} dados de mercado e ${r ? r.k : "-"} variaveis independentes, com enquadramento estimado em grau ${r ? r.foundation : "-"} de fundamentacao e grau ${r ? r.precision : "-"} de precisao.</p>
+            <p>Foi adotado o metodo comparativo direto de dados de mercado, com tratamento por estatistica inferencial sobre o ${reportTargetLabel}. O modelo utiliza ${r ? r.n : "-"} dados de mercado e ${r ? r.k : "-"} variaveis independentes, com enquadramento estimado em grau ${r ? r.foundation : "-"} de fundamentacao e grau ${r ? r.precision : "-"} de precisao.</p>
           </section>
 
           <section class="doc-section">
@@ -1948,21 +2239,16 @@ function renderReportPreview() {
             </table>
           </section>
           <section class="doc-section">
-            <h3>9. Significancia das Variaveis</h3>
+            <h3>9. Enquadramento Normativo - ${r ? `${r.foundationAssessment.points} pontos / Grau ${r.foundation}` : "Pendente"}</h3>
             <table class="doc-table compact">
-              <thead>
-                <tr><th>Variavel</th><th>p-valor</th><th>Enquadramento auxiliar</th></tr>
-              </thead>
+              <thead><tr><th>Item</th><th>Criterio</th><th>Nivel</th><th>Evidencia</th></tr></thead>
               <tbody>
-                ${(r ? r.diagnostics.significance.variables : []).map((item) => `
-                  <tr><td>${item.name}</td><td>${pct(item.pValue * 100)}</td><td>${item.grade}</td></tr>
+                ${(r ? r.foundationAssessment.items : []).map((item) => `
+                  <tr><td>${item.item}</td><td>${item.criterion}</td><td>${gradeLabel(item.grade)}</td><td>${item.evidence}</td></tr>
                 `).join("")}
               </tbody>
             </table>
-          </section>
-          <section class="doc-section">
-            <h3>10. Observacao Tecnica</h3>
-            <p>Os diagnosticos estatisticos indicam consistencia auxiliar do modelo, mas dependem da revisao do responsavel tecnico quanto a aderencia mercadologica, coerencia das variaveis, validade das amostras e atendimento integral a OS.</p>
+            <p>${r && r.foundationAssessment.usesAllocatedCodes ? "Aplicado limite maximo de grau II pelo uso de codigos alocados." : "Sem limite adicional por codigos alocados."}</p>
           </section>
         </div>
         <div class="doc-footer-note">Pagina 07 | SISAVALIA</div>
@@ -2056,6 +2342,7 @@ function updateAll() {
   renderMetrics();
   renderChecks();
   renderDiagnostics();
+  renderFoundationAssessment();
   renderModelReport();
   renderCharts();
   renderReportReview();
@@ -2064,6 +2351,10 @@ function updateAll() {
 
 function loadSample() {
   state.error = "";
+  state.modelTarget = "unit";
+  modelTarget.value = state.modelTarget;
+  state.foundationInputs = defaultFoundationInputs();
+  syncFoundationControls();
   state.modelConfig = defaultModelConfig();
   renderVariableControls();
   fields.osNumber.value = "2026.3901.000001-1";
@@ -2388,6 +2679,29 @@ document.querySelector("#clearSamplesBtn").addEventListener("click", () => {
   updateAll();
 });
 document.querySelector("#loadSampleBtn").addEventListener("click", loadSample);
+modelTarget.addEventListener("change", () => {
+  state.modelTarget = modelTarget.value === "total" ? "total" : "unit";
+  state.result = null;
+  state.error = "";
+  markProjectDirty();
+  updateAll();
+});
+Object.entries(foundationControls).forEach(([key, control]) => {
+  control.addEventListener("change", () => {
+    state.foundationInputs[key] = Math.max(0, Math.min(3, Number(control.value) || 0));
+    if (state.result) {
+      try {
+        state.error = "";
+        state.result = runRegression();
+      } catch (error) {
+        state.result = null;
+        state.error = error.message;
+      }
+    }
+    markProjectDirty();
+    updateAll();
+  });
+});
 document.querySelector("#runModelBtn").addEventListener("click", () => {
   try {
     state.error = "";

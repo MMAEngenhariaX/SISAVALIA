@@ -421,6 +421,21 @@ td input, td select { min-height: 34px; }
   font-size: 13px;
 }
 
+.model-target-control {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.model-target-control select {
+  width: 100%;
+  min-height: 38px;
+  font-weight: 600;
+}
+
 .variable-controls {
   display: grid;
   gap: 8px;
@@ -487,6 +502,75 @@ td input, td select { min-height: 34px; }
   padding: 16px;
   border: 1px solid var(--line);
   background: white;
+}
+
+.foundation-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.foundation-panel .section-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.foundation-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(190px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.foundation-evidence-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.foundation-evidence-grid select {
+  min-height: 40px;
+}
+
+.foundation-table-wrap {
+  margin-bottom: 10px;
+}
+
+.foundation-table th:nth-child(1),
+.foundation-table td:nth-child(1) {
+  width: 54px;
+  text-align: center;
+}
+
+.foundation-table th:nth-child(3),
+.foundation-table td:nth-child(3) {
+  width: 110px;
+}
+
+.foundation-grade {
+  display: inline-block;
+  min-width: 74px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.foundation-grade.grade-3 { border-color: #89bba0; color: var(--green); }
+.foundation-grade.grade-2 { border-color: #d3a75b; color: #9b6406; }
+.foundation-grade.grade-1 { border-color: #d8b878; color: #805d18; }
+.foundation-grade.grade-0 { border-color: #e6a39d; color: var(--red); }
+
+.foundation-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .diagnostic-grid {
@@ -933,7 +1017,7 @@ canvas {
   .steps { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .steps a { text-align: center; padding: 9px 6px; }
   .inline-actions { flex-wrap: wrap; }
-  .form-grid, .metrics-grid, .split, .charts-grid, .variable-panel, .variable-row, .diagnostic-grid, .review-summary { grid-template-columns: 1fr; }
+  .form-grid, .metrics-grid, .split, .charts-grid, .variable-panel, .variable-row, .diagnostic-grid, .review-summary, .foundation-evidence-grid { grid-template-columns: 1fr; }
   .review-header { flex-direction: column; }
   .review-item { grid-template-columns: 26px minmax(0, 1fr); }
   .review-item a { grid-column: 2; }

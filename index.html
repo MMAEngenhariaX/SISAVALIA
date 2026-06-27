@@ -270,6 +270,13 @@
             <div>
               <h3>Variaveis e Transformacoes</h3>
               <p>Selecione as variaveis independentes e a forma de escala usada na regressao.</p>
+              <label class="model-target-control" for="modelTarget">
+                Variavel dependente
+                <select id="modelTarget">
+                  <option value="unit">ln(VALOR UNITARIO)</option>
+                  <option value="total">ln(PRECO TOTAL)</option>
+                </select>
+              </label>
             </div>
             <div id="variableControls" class="variable-controls"></div>
           </div>
@@ -287,6 +294,51 @@
               <span id="diagnosticSummary" class="pill">Aguardando modelo</span>
             </div>
             <div id="diagnosticCards" class="diagnostic-grid"></div>
+          </div>
+          <div class="foundation-panel">
+            <div class="section-heading compact">
+              <div>
+                <h3>Enquadramento Normativo</h3>
+                <p>NBR 14653-2:2004 - Tabelas 1 e 2</p>
+              </div>
+              <span id="foundationSummary" class="pill">Aguardando evidencias</span>
+            </div>
+            <div class="foundation-evidence-grid">
+              <label>
+                1. Caracterizacao do avaliando
+                <select id="foundationCharacterization">
+                  <option value="0">NAO INFORMADO</option>
+                  <option value="3">COMPLETA - TODAS AS VARIAVEIS ANALISADAS</option>
+                  <option value="2">COMPLETA - VARIAVEIS DO MODELO</option>
+                  <option value="1">SITUACAO PARADIGMA</option>
+                </select>
+              </label>
+              <label>
+                2. Conferencia dos dados
+                <select id="foundationCollection">
+                  <option value="0">NAO INFORMADO</option>
+                  <option value="3">CONFERIDOS PELO AUTOR DO LAUDO</option>
+                  <option value="2">CONFERIDOS POR PROFISSIONAL CREDENCIADO</option>
+                  <option value="1">INFORMACOES DE TERCEIROS</option>
+                </select>
+              </label>
+              <label>
+                4. Identificacao dos dados
+                <select id="foundationIdentification">
+                  <option value="0">NAO INFORMADO</option>
+                  <option value="3">TODOS OS DADOS E VARIAVEIS, COM FOTOS</option>
+                  <option value="2">DADOS E VARIAVEIS UTILIZADOS</option>
+                  <option value="1">IDENTIFICACAO MINIMA DOS DADOS UTILIZADOS</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-wrap foundation-table-wrap">
+              <table class="foundation-table">
+                <thead><tr><th>Item</th><th>Criterio</th><th>Nivel</th><th>Evidencia</th></tr></thead>
+                <tbody id="foundationRows"></tbody>
+              </table>
+            </div>
+            <p id="foundationNote" class="foundation-note"></p>
           </div>
           <div class="split">
             <div>

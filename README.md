@@ -66,7 +66,12 @@ Na secao `Modelo Inferencial`, o painel `Variaveis e Transformacoes` permite ati
 - `sqrt(x)`
 - `x²`
 
-A variavel dependente permanece `ln(valor unitario)`, isto e, `ln(preco / area)`.
+O seletor `Variavel dependente` permite escolher entre:
+
+- `ln(valor unitario)`, isto e, `ln(preco / area)`;
+- `ln(preco total)`, mantendo valor total e valor unitario derivados na memoria e no laudo.
+
+A escolha e salva no projeto. Projetos antigos sem essa configuracao continuam abrindo no modo de valor unitario.
 
 ## Diagnostico estatistico
 
@@ -75,11 +80,18 @@ O painel `Diagnostico Estatistico` apresenta leitura auxiliar do modelo:
 - normalidade dos residuos por faixas aproximadas de 68%, 90% e 95%;
 - outliers por residuos padronizados acima de `|2|` e `|3|`;
 - multicolinearidade por correlacoes entre variaveis independentes com `|r| >= 0,80`;
-- significancia das variaveis por p-valor aproximado;
+- significancia das variaveis pelo teste t de Student com os graus de liberdade do modelo;
+- significancia global pelo teste F de Snedecor;
 - micronumerosidade por minimos de grau I, II e III;
 - diagnostico geral consolidado.
 
 Esses indicadores apoiam a revisao tecnica, mas nao substituem a responsabilidade do avaliador.
+
+## Enquadramento normativo
+
+O quadro `Enquadramento Normativo` aplica os sete itens das Tabelas 1 e 2 da NBR 14653-2:2004 presente na documentacao de referencia do projeto. Os itens 3, 5, 6 e 7 sao calculados pelo sistema; os itens 1, 2 e 4 exigem declaracao de evidencia pelo responsavel tecnico.
+
+O grau global considera pontuacao, itens obrigatorios, extrapolacao, teste t e teste F. Quando Local, Padrao ou Conservacao participam como notas de 1 a 3, o sistema os identifica como codigos alocados e limita fundamentacao e precisao ao grau II, conforme a edicao normativa utilizada. Projetos antigos ficam com o enquadramento `Pendente` ate que as evidencias manuais sejam informadas.
 
 ## Revisao automatica do laudo
 

@@ -16,6 +16,7 @@ O repositorio inclui `render.yaml` para criar um site estatico no Render. No pai
 
 - Cadastro de Ordem de Servico.
 - Cadastro completo e editavel do imovel avaliando, documentacao, terreno, edificacao, vistoria, mercado e conclusao.
+- Campos principais do avaliando para quartos, suites, banheiros e vagas.
 - Cadastro manual de amostras de mercado.
 - Importacao de amostras por CSV/TSV exportado do Excel.
 - Regressao linear multipla sobre `ln(valor unitario)`.

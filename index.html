@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SISAVALIA</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">S</span>
+          <div>
+            <strong>SISAVALIA</strong>
+            <small>Inferencia imobiliaria</small>
+          </div>
+        </div>
+        <nav class="steps" aria-label="Fluxo da avaliacao">
+          <a href="#projetos">Projetos</a>
+          <a href="#os" class="active">OS</a>
+          <a href="#avaliando">Avaliando</a>
+          <a href="#amostras">Amostras</a>
+          <a href="#modelo">Modelo</a>
+          <a href="#laudo">Laudo SisAvalia</a>
+        </nav>
+        <div class="sidebar-status">
+          <span id="overallStatusDot" class="status-dot warn"></span>
+          <span id="overallStatusText">Validando requisitos</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>Avaliacao de Imovel Urbano</h1>
+            <p>Metodo comparativo direto de dados de mercado com estatistica inferencial.</p>
+          </div>
+          <div class="export-actions">
+            <div class="actions">
+              <button id="loadSampleBtn" class="icon-button" title="Carregar exemplo">↻</button>
+              <button id="exportHtmlBtn" class="secondary-button">Exportar HTML</button>
+              <button id="exportPdfBtn" class="primary-button">Gerar PDF</button>
+            </div>
+            <small id="exportStatus" class="export-status" aria-live="polite"></small>
+          </div>
+        </header>
+
+        <section id="projetos" class="band">
+          <div class="section-heading">
+            <h2>Projetos Salvos</h2>
+            <span class="pill">Armazenamento local</span>
+          </div>
+          <div class="project-toolbar">
+            <label class="project-name">Nome do projeto<input id="projectName" placeholder="Ex.: Laudo Lapao - OS 2026..." /></label>
+            <div class="inline-actions">
+              <button id="newProjectBtn" class="ghost-button">Novo</button>
+              <button id="saveProjectBtn" class="primary-button">Salvar projeto</button>
+              <button id="exportProjectBtn" class="secondary-button">Exportar backup</button>
+            </div>
+          </div>
+          <div class="project-import">
+            <input id="projectImportFile" class="file-input" type="file" accept=".json,application/json" />
+            <button id="importProjectBtn" class="secondary-button">Importar projeto</button>
+            <span id="projectStatus" class="project-status" aria-live="polite">Nenhum projeto salvo nesta sessao.</span>
+          </div>
+          <div id="projectList" class="project-list"></div>
+        </section>
+
+        <section id="os" class="band">
+          <div class="section-heading">
+            <h2>Ordem de Servico</h2>
+            <span class="pill">SisAvalia</span>
+          </div>
+          <div class="form-grid">
+            <label>Numero da OS<input id="osNumber" /></label>
+            <label>Data da OS<input id="osDate" type="date" /></label>
+            <label>Data da vistoria<input id="inspectionDate" type="date" /></label>
+            <label>Proponente<input id="proponent" /></label>
+            <label>Proposito<select id="purpose"></select></label>
+            <label>Objetivo<select id="objective"></select></label>
+          </div>
+        </section>
+
+        <section id="avaliando" class="band">
+          <div class="section-heading">
+            <h2>Imovel Avaliando</h2>
+            <span class="pill">NBR 14653-2</span>
+          </div>
+          <div class="form-grid">
+            <label>Endereco<input id="address" /></label>
+            <label>Cidade<input id="city" /></label>
+            <label>UF<input id="state" maxlength="2" /></label>
+            <label>Tipo<select id="propertyType"></select></label>
+            <label>Area construida (m2)<input id="builtArea" type="number" step="0.01" /></label>
+            <label>Area terreno (m2)<input id="landArea" type="number" step="0.01" /></label>
+            <label>Padrao<select id="standard"></select></label>
+            <label>Conservacao<select id="conservation"></select></label>
+            <label>Localizacao<select id="locationScore"></select></label>
+            <label>Quartos<input id="bedrooms" type="number" step="1" /></label>
+            <label>Banheiros<input id="bathrooms" type="number" step="1" /></label>
+            <label>Vagas<input id="parking" type="number" step="1" /></label>
+          </div>
+          <div class="extended-form">
+            <div class="extended-form-heading">
+              <h3>Dados Completos do Laudo</h3>
+              <p>Campos vinculados diretamente as paginas formais da previa.</p>
+            </div>
+            <details open>
+              <summary>Identificacao e documentacao</summary>
+              <div class="form-grid">
+                <label>CPF/CNPJ<input id="cpfCnpj" /></label>
+                <label>Numero do imovel<input id="addressNumber" /></label>
+                <label>Complemento<input id="addressComplement" /></label>
+                <label>Bairro / setor<input id="neighborhood" /></label>
+                <label>CEP<input id="postalCode" /></label>
+                <label>Condominio / empreendimento<input id="condominiumName" /></label>
+                <label>Matricula<input id="registrationNumber" /></label>
+                <label>Cartorio / oficio<input id="registryOffice" /></label>
+                <label>Emissao da matricula<input id="registrationDate" type="date" /></label>
+                <label class="span-3">Observacoes cadastrais<textarea id="propertyNotes" rows="3"></textarea></label>
+              </div>
+            </details>
+            <details>
+              <summary>Entorno e terreno</summary>
+              <div class="form-grid">
+                <label>Uso predominante<input id="predominantUse" /></label>
+                <label>Acesso<input id="accessType" /></label>
+                <label>Area de risco / alagamento<select id="riskArea"></select></label>
+                <label>Numero de frentes<input id="fronts" type="number" min="0" step="1" /></label>
+                <label>Testada (m)<input id="frontage" type="number" min="0" step="0.01" /></label>
+                <label>Topografia<input id="topography" /></label>
+                <label>Posicao na quadra<input id="blockPosition" /></label>
+                <label>Fracao ideal<input id="idealFraction" /></label>
+                <label>Superficie<input id="surface" /></label>
+                <label>Cota greide / formato<input id="gradeFormat" /></label>
+                <label class="span-3">Infraestrutura urbana<textarea id="urbanInfrastructure" rows="2"></textarea></label>
+                <label class="span-3">Servicos publicos<textarea id="publicServices" rows="2"></textarea></label>
+              </div>
+            </details>
+            <details>
+              <summary>Caracteristicas construtivas</summary>
+              <div class="form-grid">
+                <label>Uso do imovel<input id="propertyUse" /></label>
+                <label>Posicao da edificacao<input id="buildingPosition" /></label>
+                <label>Ocupacao<input id="occupancy" /></label>
+                <label>Suites<input id="suites" type="number" min="0" step="1" /></label>
+                <label>Lavabos<input id="lavatories" type="number" min="0" step="1" /></label>
+                <label>Pavimentos<input id="floors" type="number" min="0" step="1" /></label>
+                <label>Idade aparente (anos)<input id="apparentAge" type="number" min="0" step="1" /></label>
+                <label>Esquadrias<input id="windowFrames" /></label>
+                <label>Cobertura / teto<input id="roofCeiling" /></label>
+                <label>Abastecimento de agua<input id="waterSupply" /></label>
+                <label>Esgoto sanitario<input id="sewage" /></label>
+                <label>Fechamento de paredes<input id="wallSystem" /></label>
+                <label>Tipo de implantacao<input id="deploymentType" /></label>
+                <label>Habitado anteriormente<select id="previouslyOccupied"></select></label>
+                <label>Area nao averbada (m2)<input id="unregisteredArea" type="number" min="0" step="0.01" /></label>
+                <label>Vagas cobertas<input id="coveredParking" type="number" min="0" step="1" /></label>
+                <label>Vagas descobertas<input id="uncoveredParking" type="number" min="0" step="1" /></label>
+                <label>Latitude<input id="latitude" type="number" step="any" /></label>
+                <label>Longitude<input id="longitude" type="number" step="any" /></label>
+                <label class="span-3">Comodos e dependencias<textarea id="roomsDescription" rows="2"></textarea></label>
+                <label class="span-3">Infraestrutura do imovel<textarea id="propertyInfrastructure" rows="2"></textarea></label>
+                <label class="span-3">Estrutura do condominio<textarea id="condominiumFeatures" rows="2"></textarea></label>
+              </div>
+            </details>
+            <details>
+              <summary>Vistoria e condicoes gerais</summary>
+              <div class="form-grid">
+                <label>Documentacao confere<select id="documentationMatches"></select></label>
+                <label>Estabilidade e solidez<select id="stability"></select></label>
+                <label>Vicios aparentes<select id="apparentDefects"></select></label>
+                <label>Habitabilidade<select id="habitability"></select></label>
+                <label>Fatores ambientais<select id="environmentalFactors"></select></label>
+                <label>Sistema DATEC/SINAT<select id="datecSinat"></select></label>
+                <label>Contato da vistoria<input id="inspectionContact" /></label>
+                <label>Telefone<input id="inspectionPhone" type="tel" /></label>
+                <label>Data do contato<input id="contactDate" type="date" /></label>
+                <label>Hora de chegada<input id="arrivalTime" type="time" /></label>
+                <label>Hora de saida<input id="departureTime" type="time" /></label>
+                <label>Data do agendamento<input id="appointmentDate" type="date" /></label>
+                <label>Hora do agendamento<input id="appointmentTime" type="time" /></label>
+                <label class="span-3">Fatores valorizantes<textarea id="valuedFactors" rows="2"></textarea></label>
+                <label class="span-3">Fatores restritivos / depreciacao<textarea id="restrictiveFactors" rows="2"></textarea></label>
+                <label class="span-3">Ateste / historico de vistoria<textarea id="inspectionHistory" rows="2"></textarea></label>
+              </div>
+            </details>
+            <details>
+              <summary>Mercado, garantia e conclusao</summary>
+              <div class="form-grid">
+                <label>Desempenho do mercado<input id="marketPerformance" /></label>
+                <label>Nivel de ofertas<input id="offersLevel" /></label>
+                <label>Liquidez / prazo provavel<input id="liquidity" /></label>
+                <label>Prazo efetivo<input id="effectivePeriod" /></label>
+                <label>Aceito em garantia<select id="guaranteeAccepted"></select></label>
+                <label>ART/RRT<input id="artRrt" /></label>
+                <label class="span-3">Unidades autonomas / cartorio<textarea id="autonomousUnits" rows="2"></textarea></label>
+                <label class="span-3">Observacoes finais<textarea id="finalNotes" rows="3"></textarea></label>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section id="amostras" class="band">
+          <div class="section-heading">
+            <h2>Amostras de Mercado</h2>
+            <div class="inline-actions">
+              <select id="importMode" class="compact-select" title="Modo de importacao">
+                <option value="replace">Substituir</option>
+                <option value="append">Acrescentar</option>
+              </select>
+              <input id="sampleImportFile" class="file-input" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
+              <button id="importSamplesBtn" class="secondary-button">Importar CSV</button>
+              <button id="downloadTemplateBtn" class="ghost-button">Modelo CSV</button>
+              <button id="addSampleBtn" class="secondary-button">Adicionar</button>
+              <button id="clearSamplesBtn" class="ghost-button">Limpar</button>
+            </div>
+          </div>
+          <p id="importStatus" class="import-status">Importe arquivos CSV/TSV exportados do Excel com colunas: fonte, preco, area, local, padrao, conservacao.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fonte / endereco</th>
+                  <th>Preco (R$)</th>
+                  <th>Area (m2)</th>
+                  <th>Local</th>
+                  <th>Padrao</th>
+                  <th>Conserv.</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="samplesBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="modelo" class="band">
+          <div class="section-heading">
+            <h2>Modelo Inferencial</h2>
+            <button id="runModelBtn" class="primary-button">Calcular</button>
+          </div>
+          <div class="variable-panel">
+            <div>
+              <h3>Variaveis e Transformacoes</h3>
+              <p>Selecione as variaveis independentes e a forma de escala usada na regressao.</p>
+            </div>
+            <div id="variableControls" class="variable-controls"></div>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric"><small>Dados utilizados</small><strong id="metricN">0</strong></div>
+            <div class="metric"><small>Variaveis</small><strong id="metricK">0</strong></div>
+            <div class="metric"><small>R2 ajustado</small><strong id="metricR2">-</strong></div>
+            <div class="metric"><small>Valor adotado</small><strong id="metricValue">-</strong></div>
+            <div class="metric"><small>Fundamentacao</small><strong id="metricFoundation">-</strong></div>
+            <div class="metric"><small>Precisao</small><strong id="metricPrecision">-</strong></div>
+          </div>
+          <div class="diagnostic-panel">
+            <div class="section-heading compact">
+              <h3>Diagnostico Estatistico</h3>
+              <span id="diagnosticSummary" class="pill">Aguardando modelo</span>
+            </div>
+            <div id="diagnosticCards" class="diagnostic-grid"></div>
+          </div>
+          <div class="split">
+            <div>
+              <h3>Checklist ABNT e SisAvalia</h3>
+              <ul id="checklist" class="checklist"></ul>
+            </div>
+            <div>
+              <h3>Equacao e memoria</h3>
+              <pre id="modelReport" class="report-box">Calcule o modelo para ver a memoria.</pre>
+            </div>
+          </div>
+          <div class="charts-panel">
+            <div class="section-heading compact">
+              <h3>Graficos do Modelo</h3>
+              <span class="pill">Referencia TS-Sisreg</span>
+            </div>
+            <div class="charts-grid">
+              <div class="chart-box">
+                <div class="chart-title">Aderencia: observado x calculado</div>
+                <canvas id="adherenceChart" width="640" height="360"></canvas>
+              </div>
+              <div class="chart-box">
+                <div class="chart-title">Residuos padronizados</div>
+                <canvas id="residualChart" width="640" height="360"></canvas>
+              </div>
+              <div class="chart-box">
+                <div class="chart-title">Distribuicao dos residuos</div>
+                <canvas id="normalityChart" width="640" height="360"></canvas>
+              </div>
+              <div class="chart-box">
+                <div class="chart-title">Matriz de correlacoes</div>
+                <canvas id="correlationChart" width="640" height="360"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="laudo" class="band">
+          <div class="section-heading">
+            <h2>Previa do Laudo</h2>
+            <span class="pill">Uso interno</span>
+          </div>
+          <div class="review-panel" aria-labelledby="reviewTitle">
+            <div class="review-header">
+              <div>
+                <h3 id="reviewTitle">Revisao Automatica do Laudo</h3>
+                <p id="reviewMessage">Verificando consistencia cadastral, amostral e estatistica.</p>
+              </div>
+              <button id="reviewBtn" class="secondary-button">Revisar agora</button>
+            </div>
+            <div class="review-summary" aria-live="polite">
+              <div class="review-verdict">
+                <small>Parecer automatico</small>
+                <strong id="reviewVerdict">Em analise</strong>
+              </div>
+              <div class="review-counter critical"><strong id="reviewCriticalCount">0</strong><span>Criticas</span></div>
+              <div class="review-counter warning"><strong id="reviewWarningCount">0</strong><span>Alertas</span></div>
+              <div class="review-counter manual"><strong id="reviewManualCount">0</strong><span>Manuais</span></div>
+            </div>
+            <div id="reviewResults" class="review-results"></div>
+          </div>
+          <article id="reportPreview" class="report-preview"></article>
+        </section>
+      </main>
+    </div>
+    <script src="src/app.js"></script>
+  </body>
+</html>

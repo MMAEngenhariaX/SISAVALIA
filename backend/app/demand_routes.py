@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import logging
+from uuid import UUID
+
+from fastapi import APIRouter, Header, HTTPException, Query
+
+from .config import load_settings
+from .demand_repository import DemandRepository, DuplicateDemandError
+from .demand_schemas import DemandInput, EngineerInput, EvaluationProjectInput, PartnerInput, PaymentInput, PaymentUpdate
+
+
+router = APIRouter(prefix="/api/v1/demand-control", tags=["Controle de Demanda"])
+logger = logging.getLogger(__name__)
+
+
+def repository() -> DemandRepository:
+    database_url = load_settings().database_url
+    if not database_url:
+        raise HTTPException(status_code=503, detail="Configure o PostgreSQL para usar o Controle de Demanda.")
+    return DemandRepository(database_url)
+
+
+@router.get("/client-banks")
+def client_banks() -> dict:
+    return {"items": repository().list_client_banks()}
+
+
+@router.get("/partners")
+def partners() -> dict:
+    return {"items": repository().list_partners()}
+
+
+@router.post("/partners", status_code=201)
+def create_partner(payload: PartnerInput) -> dict:
+    try:
+        return repository().create_partner(payload)
+    except Exception as exc:
+        if getattr(exc, "sqlstate", None) == "23505":
+            raise HTTPException(status_code=409, detail="Parceiro já cadastrado com nome equivalente.") from exc
+        raise
+
+
+@router.get("/engineers")
+def engineers() -> dict:
+    return {"items": repository().list_engineers()}
+
+
+@router.post("/engineers", status_code=201)
+def create_engineer(payload: EngineerInput) -> dict:
+    try:
+        return repository().create_engineer(payload)
+    except Exception as exc:
+        if getattr(exc, "sqlstate", None) == "23505":
+            raise HTTPException(status_code=409, detail="Engenheiro já cadastrado com nome equivalente.") from exc
+        raise
+
+
+@router.get("/demands")
+def demands(
+    limit: int = Query(default=200, ge=1, le=1000),
+    search: str | None = Query(default=None, max_length=200),
+) -> dict:
+    repo = repository()
+    try:
+        return {"items": repo.list_demands(limit=limit, search=search)}
+    except Exception as exc:
+        logger.exception("Falha ao listar/pesquisar demandas")
+        return {
+            "items": [],
+            "warning": (
+                "A lista de demandas foi carregada em modo seguro. "
+                f"Detalhe técnico: {type(exc).__name__}: {exc}"
+            ),
+        }
+
+
+@router.post("/demands", status_code=201)
+def create_demand(payload: DemandInput, x_sisavalia_user: str | None = Header(default=None)) -> dict:
+    try:
+        return repository().create_demand(payload, user_id=x_sisavalia_user)
+    except DuplicateDemandError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/demands/reset")
+def reset_demands(payload: dict, x_sisavalia_user: str | None = Header(default=None)) -> dict:
+    if payload.get("confirmation") != "LIMPAR":
+        raise HTTPException(status_code=422, detail="Confirmação inválida. Digite LIMPAR para zerar as demandas.")
+    return repository().reset_demands(user_id=x_sisavalia_user)
+
+
+@router.post("/demands/{demand_id}")
+def update_demand(demand_id: str, payload: DemandInput, x_sisavalia_user: str | None = Header(default=None)) -> dict:
+    try:
+        return repository().update_demand(UUID(demand_id), payload, user_id=x_sisavalia_user)
+    except DuplicateDemandError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/demands/{demand_id}/evaluation")
+def create_or_update_evaluation_from_demand(
+    demand_id: str,
+    payload: EvaluationProjectInput,
+    x_sisavalia_user: str | None = Header(default=None),
+) -> dict:
+    try:
+        return repository().create_or_update_evaluation_from_demand(
+            UUID(demand_id),
+            payload,
+            user_id=x_sisavalia_user,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/payments", status_code=201)
+def create_payment(payload: PaymentInput) -> dict:
+    return repository().create_payment(payload)
+
+
+@router.get("/payments")
+def payments(limit: int = Query(default=500, ge=1, le=2000)) -> dict:
+    return {"items": repository().list_payments(limit=limit)}
+
+
+@router.post("/payments/{payment_id}")
+def update_payment(payment_id: UUID, payload: PaymentUpdate, x_sisavalia_user: str | None = Header(default=None)) -> dict:
+    try:
+        return repository().update_payment(payment_id, payload, user_id=x_sisavalia_user)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/dashboard")
+def dashboard() -> dict:
+    return repository().dashboard()
+
+
+@router.get("/financial/monthly")
+def monthly_financial(months: int = Query(default=12, ge=1, le=60)) -> dict:
+    return {"items": repository().monthly_financial_evolution(months=months)}

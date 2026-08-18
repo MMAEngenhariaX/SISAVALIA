@@ -110,5 +110,6 @@ class PaymentUpdate(BaseModel):
 
 class EvaluationProjectInput(BaseModel):
     name: str | None = Field(default=None, max_length=240)
+    os_number: str | None = Field(default=None, max_length=200)
     project_payload: dict[str, Any] = Field(default_factory=dict)
     replace_existing: bool = False

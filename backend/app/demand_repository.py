@@ -455,6 +455,115 @@ class DemandRepository:
             )
             return {"status": "linked", "evaluation": evaluation, "demand": updated_demand}
 
+    @staticmethod
+    def _project_payload_os_number(project_payload: dict[str, Any]) -> str | None:
+        fields = project_payload.get("fields") if isinstance(project_payload, dict) else None
+        if isinstance(fields, dict):
+            os_number = str(fields.get("osNumber") or "").strip()
+            if os_number:
+                return os_number
+        os_number = str(project_payload.get("linkedDemandOsNumber") or "").strip() if isinstance(project_payload, dict) else ""
+        return os_number or None
+
+    def list_evaluation_projects(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        with connect(self.database_url) as connection, connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                """
+                SELECT id, name, os_number, project_payload, status, report_status, created_at, updated_at
+                FROM evaluation_projects
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            return cursor.fetchall()
+
+    def save_evaluation_project(
+        self,
+        payload: EvaluationProjectInput,
+        *,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        data = payload.model_dump()
+        project_payload = data.get("project_payload") or {}
+        os_number = (data.get("os_number") or self._project_payload_os_number(project_payload) or "").strip() or None
+        name = (
+            data.get("name")
+            or project_payload.get("name")
+            or (f"OS {os_number}" if os_number else "Projeto SISAVALIA")
+        )
+        name = str(name).strip()[:240] or "Projeto SISAVALIA"
+        with connect(self.database_url) as connection, connection.cursor(row_factory=dict_row) as cursor:
+            existing = None
+            if os_number:
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM evaluation_projects
+                    WHERE os_number = %s
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    (os_number,),
+                )
+                existing = cursor.fetchone()
+            if existing:
+                cursor.execute(
+                    """
+                    UPDATE evaluation_projects
+                    SET name=%s, os_number=%s, project_payload=%s::jsonb,
+                        status='Rascunho', report_status=COALESCE(report_status, 'Não iniciado'),
+                        updated_at=now()
+                    WHERE id=%s
+                    RETURNING *
+                    """,
+                    (name, os_number, json.dumps(project_payload, default=str), existing["id"]),
+                )
+                evaluation = cursor.fetchone()
+                action = "evaluation_project_updated"
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO evaluation_projects (name, os_number, project_payload, status, report_status)
+                    VALUES (%s, %s, %s::jsonb, 'Rascunho', 'Não iniciado')
+                    RETURNING *
+                    """,
+                    (name, os_number, json.dumps(project_payload, default=str)),
+                )
+                evaluation = cursor.fetchone()
+                action = "evaluation_project_created"
+            if os_number:
+                cursor.execute(
+                    """
+                    UPDATE demands
+                    SET evaluation_id=%s, updated_at=now()
+                    WHERE os_number=%s
+                      AND evaluation_id IS DISTINCT FROM %s
+                    """,
+                    (evaluation["id"], os_number, evaluation["id"]),
+                )
+            cursor.execute(
+                """
+                INSERT INTO demand_audit_events (entity, entity_id, action, new_data, user_id)
+                VALUES ('evaluation_project', %s, %s, %s::jsonb, %s)
+                """,
+                (
+                    evaluation["id"],
+                    action,
+                    json.dumps(
+                        {
+                            "evaluation_id": str(evaluation["id"]),
+                            "name": evaluation["name"],
+                            "os_number": evaluation["os_number"],
+                        },
+                        default=str,
+                    ),
+                    user_id,
+                ),
+            )
+            return evaluation
+
     def create_payment(self, payload: PaymentInput) -> dict[str, Any]:
         data = payload.model_dump()
         with connect(self.database_url) as connection, connection.cursor(row_factory=dict_row) as cursor:

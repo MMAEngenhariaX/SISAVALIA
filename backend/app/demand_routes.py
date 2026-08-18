@@ -122,6 +122,19 @@ def create_or_update_evaluation_from_demand(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.get("/evaluations")
+def evaluation_projects(limit: int = Query(default=200, ge=1, le=1000)) -> dict:
+    return {"items": repository().list_evaluation_projects(limit=limit)}
+
+
+@router.post("/evaluations", status_code=201)
+def save_evaluation_project(
+    payload: EvaluationProjectInput,
+    x_sisavalia_user: str | None = Header(default=None),
+) -> dict:
+    return repository().save_evaluation_project(payload, user_id=x_sisavalia_user)
+
+
 @router.post("/payments", status_code=201)
 def create_payment(payload: PaymentInput) -> dict:
     return repository().create_payment(payload)

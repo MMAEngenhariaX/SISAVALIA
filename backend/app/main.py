@@ -67,6 +67,45 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "sisavalia-search-engine", "phase": "foundation"}
 
 
+@app.get("/health/db")
+def database_health() -> dict:
+    if not settings.database_url:
+        return {
+            "status": "warning",
+            "database_configured": False,
+            "detail": "Banco de dados não configurado.",
+        }
+    try:
+        from .db import connect
+
+        with connect(settings.database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name IN ('client_banks', 'demands', 'partners', 'engineers')
+                    """
+                )
+                demand_tables = cursor.fetchone()[0]
+                cursor.execute("SELECT to_regclass('public.schema_migrations')")
+                has_migrations_table = bool(cursor.fetchone()[0])
+        return {
+            "status": "ok",
+            "database_configured": True,
+            "demand_tables_found": demand_tables,
+            "schema_migrations_table": has_migrations_table,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "database_configured": True,
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
+
+
 @app.post("/api/v1/listings/validate", response_model=ValidationResponse)
 def validate(payload: ListingInput) -> ValidationResponse:
     issues = validate_listing(to_domain(payload))

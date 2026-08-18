@@ -1100,7 +1100,7 @@
   function renderDuplicateEvaluationDecision(demand, savedProjects) {
     evaluationSearchResults = [demand];
     evaluationDemandMatches.hidden = false;
-    const hasLocalProject = savedProjects.some((project) => project.id);
+    const hasLocalProject = savedProjects.some((project) => project.id || project.remoteEvaluationId);
     evaluationDemandMatches.innerHTML = `
       <div class="evaluation-duplicate-card">
         <span class="financial-kicker">Possível duplicidade identificada</span>
@@ -1116,9 +1116,11 @@
             <article>
               <div>
                 <strong>${escapeHtml(project.name)}</strong>
-                <small>OS ${escapeHtml(project.osNumber || demand.os_number)} · ${escapeHtml([project.city, project.state].filter(Boolean).join("/") || "Local não informado")} · ${project.backendOnly ? "Registro vinculado no PostgreSQL" : `${Number(project.sampleCount || 0).toLocaleString("pt-BR")} amostra(s)`}</small>
+                <small>OS ${escapeHtml(project.osNumber || demand.os_number)} · ${escapeHtml([project.city, project.state].filter(Boolean).join("/") || "Local não informado")} · ${project.source === "Render" ? "Projeto salvo no Render" : project.backendOnly ? "Registro vinculado no PostgreSQL" : `${Number(project.sampleCount || 0).toLocaleString("pt-BR")} amostra(s)`}</small>
               </div>
-              ${project.id
+              ${project.remoteEvaluationId
+                ? `<button type="button" class="table-action" data-open-remote-project="${escapeHtml(project.remoteEvaluationId)}">Abrir do Render</button>`
+                : project.id
                 ? `<button type="button" class="table-action" data-open-project="${escapeHtml(project.id)}">Abrir para verificar</button>`
                 : '<span class="registry-state">Sem projeto local</span>'}
             </article>
@@ -1825,6 +1827,15 @@
       if (window.SISAVALIA?.openStoredProject) {
         window.SISAVALIA.openStoredProject(projectButton.dataset.openProject);
         evaluationDemandMessage.textContent = "Avaliação existente aberta para verificação.";
+        evaluationDemandMessage.className = "project-status ok";
+      }
+      return;
+    }
+    const remoteProjectButton = event.target.closest("[data-open-remote-project]");
+    if (remoteProjectButton) {
+      if (window.SISAVALIA?.openRemoteProject) {
+        window.SISAVALIA.openRemoteProject(remoteProjectButton.dataset.openRemoteProject);
+        evaluationDemandMessage.textContent = "Avaliação salva no Render aberta para verificação.";
         evaluationDemandMessage.className = "project-status ok";
       }
       return;

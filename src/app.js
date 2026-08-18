@@ -161,6 +161,9 @@ const projectName = document.querySelector("#projectName");
 const projectStatus = document.querySelector("#projectStatus");
 const projectList = document.querySelector("#projectList");
 const projectImportFile = document.querySelector("#projectImportFile");
+const saveProjectRenderBtn = document.querySelector("#saveProjectRenderBtn");
+const loadRenderProjectsBtn = document.querySelector("#loadRenderProjectsBtn");
+const saveOsRenderBtn = document.querySelector("#saveOsRenderBtn");
 const sampleImportFile = document.querySelector("#sampleImportFile");
 const importMode = document.querySelector("#importMode");
 const importStatus = document.querySelector("#importStatus");
@@ -250,6 +253,7 @@ const state = {
   reportPhotos: [],
   reportMap: null,
   activeProjectId: null,
+  remoteProjects: [],
   projectDirty: false,
 };
 
@@ -397,6 +401,27 @@ function backendApiBaseUrl() {
 }
 
 const BACKEND_API_BASE_URL = backendApiBaseUrl();
+
+async function demandControlApi(path, options = {}) {
+  const response = await fetch(`${BACKEND_API_BASE_URL}/api/v1/demand-control${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body = await response.json();
+      detail = body.detail || body.message || detail;
+    } catch {
+      detail = response.statusText || detail;
+    }
+    throw new Error(detail);
+  }
+  return response.json();
+}
 
 function cepDigits(value = fields.postalCode.value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
@@ -2391,34 +2416,73 @@ function currentProjectData(id = state.activeProjectId || projectIdentifier()) {
   };
 }
 
+function normalizeRemoteProjectRecord(record) {
+  const payload = record && typeof record.project_payload === "object" && record.project_payload
+    ? record.project_payload
+    : {};
+  const fieldsPayload = payload.fields && typeof payload.fields === "object" ? payload.fields : {};
+  const samplesPayload = Array.isArray(payload.samples) ? payload.samples : [];
+  const osNumber = String(record?.os_number || fieldsPayload.osNumber || payload.linkedDemandOsNumber || "").trim();
+  return {
+    version: payload.version || 1,
+    ...payload,
+    id: payload.id || `render-${record.id}`,
+    remoteEvaluationId: record.id,
+    remote: true,
+    name: record.name || payload.name || (osNumber ? `OS ${osNumber}` : "Projeto SISAVALIA"),
+    updatedAt: record.updated_at || payload.updatedAt || record.created_at || new Date().toISOString(),
+    linkedDemandOsNumber: osNumber || payload.linkedDemandOsNumber || null,
+    fields: {
+      ...fieldsPayload,
+      ...(osNumber && !fieldsPayload.osNumber ? { osNumber } : {}),
+    },
+    samples: samplesPayload,
+    reportPhotos: Array.isArray(payload.reportPhotos) ? payload.reportPhotos : [],
+    reportMap: payload.reportMap || null,
+    modelTarget: payload.modelTarget || "unit",
+    foundationInputs: payload.foundationInputs || defaultFoundationInputs(),
+    modelConfig: payload.modelConfig || defaultModelConfig(),
+  };
+}
+
 function markProjectDirty() {
   state.projectDirty = true;
   setProjectStatus("Alteracoes nao salvas.", "warn");
 }
 
 function renderProjectList() {
-  const projects = readStoredProjects().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  const localProjects = readStoredProjects().map((project) => ({ ...project, source: "local" }));
+  const remoteProjects = state.remoteProjects.map((project) => ({ ...project, source: "render" }));
+  const projects = [...localProjects, ...remoteProjects]
+    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
   if (!projects.length) {
-    projectList.innerHTML = '<div class="project-empty">Nenhum projeto salvo neste navegador.</div>';
+    projectList.innerHTML = '<div class="project-empty">Nenhum projeto salvo neste navegador ou no Render.</div>';
     return;
   }
   projectList.innerHTML = projects.map((project) => {
     const updated = project.updatedAt ? new Date(project.updatedAt).toLocaleString("pt-BR") : "Data nao informada";
     const sampleCount = Array.isArray(project.samples) ? project.samples.length : 0;
+    const isRemote = project.source === "render";
+    const active = project.id === state.activeProjectId || project.remoteEvaluationId === state.activeProjectId;
+    const sourceLabel = isRemote ? "Render" : "Local";
+    const osText = project?.fields?.osNumber || project.linkedDemandOsNumber || "";
     return `
-      <article class="project-item ${project.id === state.activeProjectId ? "active" : ""}">
+      <article class="project-item ${active ? "active" : ""} ${isRemote ? "remote" : ""}">
         <div>
           <strong>${escapeHtml(project.name || "Laudo sem titulo")}</strong>
-          <small>Atualizado em ${escapeHtml(updated)} | ${sampleCount} amostra(s)</small>
+          <small><span class="project-source-pill">${sourceLabel}</span> Atualizado em ${escapeHtml(updated)} | ${sampleCount} amostra(s)${osText ? ` | OS ${escapeHtml(osText)}` : ""}</small>
         </div>
         <div class="project-item-actions">
-          <button type="button" data-project-open="${project.id}">Abrir</button>
-          <button type="button" class="project-delete" data-project-delete="${project.id}">Excluir</button>
+          <button type="button" ${isRemote ? `data-render-project-open="${project.remoteEvaluationId}"` : `data-project-open="${project.id}"`}>Abrir</button>
+          ${isRemote ? "" : `<button type="button" class="project-delete" data-project-delete="${project.id}">Excluir</button>`}
         </div>
       </article>`;
   }).join("");
   projectList.querySelectorAll("[data-project-open]").forEach((button) => {
     button.addEventListener("click", () => openStoredProject(button.dataset.projectOpen));
+  });
+  projectList.querySelectorAll("[data-render-project-open]").forEach((button) => {
+    button.addEventListener("click", () => openRemoteProject(button.dataset.renderProjectOpen));
   });
   projectList.querySelectorAll("[data-project-delete]").forEach((button) => {
     button.addEventListener("click", () => deleteStoredProject(button.dataset.projectDelete));
@@ -2515,11 +2579,72 @@ function openStoredProject(id) {
   }
 }
 
+function openRemoteProject(id) {
+  const project = state.remoteProjects.find((item) => String(item.remoteEvaluationId) === String(id) || String(item.id) === String(id));
+  if (!project) {
+    setProjectStatus("Projeto nao encontrado no Render. Clique em Carregar do Render e tente novamente.", "fail");
+    return;
+  }
+  try {
+    applyProjectData(project);
+    state.activeProjectId = project.id;
+    setProjectStatus(`Projeto "${project.name}" carregado do Render.`, "ok");
+    location.hash = "os";
+  } catch (error) {
+    setProjectStatus(error.message, "fail");
+  }
+}
+
+async function loadRenderProjects(silent = false) {
+  try {
+    if (!silent) setProjectStatus("Carregando projetos salvos no Render...", "warn");
+    const data = await demandControlApi("/evaluations?limit=200");
+    state.remoteProjects = Array.isArray(data.items) ? data.items.map(normalizeRemoteProjectRecord) : [];
+    renderProjectList();
+    if (!silent) {
+      setProjectStatus(`${state.remoteProjects.length} projeto(s)/OS carregado(s) do Render.`, "ok");
+    }
+    return state.remoteProjects;
+  } catch (error) {
+    if (!silent) {
+      setProjectStatus(`Nao foi possivel carregar do Render: ${error.message}`, "fail");
+    }
+    return [];
+  }
+}
+
+async function saveCurrentProjectToRender() {
+  const project = currentProjectData();
+  const osNumber = String(project.fields?.osNumber || project.linkedDemandOsNumber || "").trim();
+  if (!project.name && !osNumber) {
+    setProjectStatus("Informe ao menos o nome do projeto ou o numero da OS antes de salvar no Render.", "fail");
+    return;
+  }
+  try {
+    setProjectStatus("Salvando projeto/OS no Render...", "warn");
+    const saved = await demandControlApi("/evaluations", {
+      method: "POST",
+      body: JSON.stringify({
+        name: project.name,
+        os_number: osNumber || null,
+        replace_existing: true,
+        project_payload: project,
+      }),
+    });
+    state.activeProjectId = project.id;
+    state.projectDirty = false;
+    await loadRenderProjects(true);
+    setProjectStatus(`Projeto "${saved.name || project.name}" salvo no Render.`, "ok");
+  } catch (error) {
+    setProjectStatus(`Nao foi possivel salvar no Render: ${error.message}`, "fail");
+  }
+}
+
 function findStoredProjectsByOs(osNumber) {
   const targetDigits = onlyDigits(osNumber);
   const targetText = String(osNumber ?? "").trim().toLowerCase();
   if (!targetDigits && !targetText) return [];
-  return readStoredProjects().filter((project) => {
+  const localMatches = readStoredProjects().filter((project) => {
     const savedOs = String(project?.fields?.osNumber || project?.linkedDemandOsNumber || "").trim();
     const savedDigits = onlyDigits(savedOs);
     if (targetDigits && savedDigits && savedDigits === targetDigits) return true;
@@ -2534,6 +2659,24 @@ function findStoredProjectsByOs(osNumber) {
     updatedAt: project.updatedAt || "",
     sampleCount: Array.isArray(project.samples) ? project.samples.length : 0,
   }));
+  const remoteMatches = state.remoteProjects.filter((project) => {
+    const savedOs = String(project?.fields?.osNumber || project?.linkedDemandOsNumber || "").trim();
+    const savedDigits = onlyDigits(savedOs);
+    if (targetDigits && savedDigits && savedDigits === targetDigits) return true;
+    return Boolean(targetText && savedOs.toLowerCase() === targetText);
+  }).map((project) => ({
+    id: project.id,
+    remoteEvaluationId: project.remoteEvaluationId,
+    name: project.name || "Laudo sem titulo",
+    osNumber: project?.fields?.osNumber || project.linkedDemandOsNumber || "",
+    proponent: project?.fields?.proponent || "",
+    city: project?.fields?.city || "",
+    state: project?.fields?.state || "",
+    updatedAt: project.updatedAt || "",
+    sampleCount: Array.isArray(project.samples) ? project.samples.length : 0,
+    source: "Render",
+  }));
+  return [...localMatches, ...remoteMatches];
 }
 
 function deleteStoredProject(id) {
@@ -3514,6 +3657,9 @@ document.querySelector("#logoutBtn").addEventListener("click", logout);
 loginForm.addEventListener("submit", authenticate);
 document.querySelector("#newProjectBtn").addEventListener("click", newBlankProject);
 document.querySelector("#saveProjectBtn").addEventListener("click", saveCurrentProject);
+saveProjectRenderBtn?.addEventListener("click", saveCurrentProjectToRender);
+loadRenderProjectsBtn?.addEventListener("click", () => loadRenderProjects(false));
+saveOsRenderBtn?.addEventListener("click", saveCurrentProjectToRender);
 document.querySelector("#exportProjectBtn").addEventListener("click", exportProjectBackup);
 document.querySelector("#importProjectBtn").addEventListener("click", importProjectBackup);
 document.querySelector("#reviewBtn").addEventListener("click", () => {
@@ -3530,6 +3676,9 @@ window.SISAVALIA = {
   importApprovedSamples,
   findStoredProjectsByOs,
   openStoredProject,
+  openRemoteProject,
+  loadRenderProjects,
+  saveCurrentProjectToRender,
   saveCurrentProject,
   currentProjectData,
   updateAll,
@@ -3591,6 +3740,7 @@ async function autoLoadCastanhalSamples() {
 renderVariableControls();
 newBlankProject(false);
 renderProjectList();
+loadRenderProjects(true);
 const localSearchQuery = new URLSearchParams(window.location.search);
 const localFixtureMode = ["127.0.0.1", "localhost"].includes(window.location.hostname)
   && (localSearchQuery.get("searchEngine") === "1" || localSearchQuery.get("fixtureSearch") === "1");

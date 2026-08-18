@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SISAVALIA</title>
-    <link rel="stylesheet" href="src/styles.css?v=20260721-status-os-entregue" />
+    <link rel="stylesheet" href="src/styles.css?v=20260818-render-projects" />
   </head>
   <body class="auth-locked">
     <section id="loginGate" class="login-gate" aria-labelledby="loginTitle">
@@ -86,6 +86,8 @@
             <div class="inline-actions">
               <button id="newProjectBtn" class="ghost-button">Novo</button>
               <button id="saveProjectBtn" class="primary-button">Salvar projeto</button>
+              <button id="saveProjectRenderBtn" class="secondary-button">Salvar no Render</button>
+              <button id="loadRenderProjectsBtn" class="secondary-button">Carregar do Render</button>
               <button id="exportProjectBtn" class="secondary-button">Exportar backup</button>
             </div>
           </div>
@@ -470,7 +472,10 @@
         <section id="os" class="band">
           <div class="section-heading">
             <h2>Ordem de Servico</h2>
-            <span class="pill">SisAvalia</span>
+            <div class="inline-actions">
+              <button id="saveOsRenderBtn" class="secondary-button" type="button">Salvar OS no Render</button>
+              <span class="pill">SisAvalia</span>
+            </div>
           </div>
           <div class="evaluation-demand-search">
             <div>
@@ -963,8 +968,8 @@
         </section>
       </main>
     </div>
-    <script src="src/app.js?v=20260720-etapa9-checklist-emissao"></script>
+    <script src="src/app.js?v=20260818-render-projects"></script>
     <script src="src/search-engine.js?v=20260702-2010"></script>
-    <script src="src/demand-control.js?v=20260721-status-os-entregue"></script>
+    <script src="src/demand-control.js?v=20260818-render-projects"></script>
   </body>
 </html>

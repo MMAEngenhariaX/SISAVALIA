@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: sisavalia-search-engine
+Version: 0.1.0
+Summary: API de coleta, validação e deduplicação de amostras do SISAVALIA
+Requires-Python: >=3.11
+Requires-Dist: fastapi[standard]<1,>=0.115
+Requires-Dist: psycopg[binary]<4,>=3.2
+Provides-Extra: dev
+Requires-Dist: httpx<1,>=0.27; extra == "dev"

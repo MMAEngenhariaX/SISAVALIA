@@ -475,10 +475,26 @@ p { color: var(--muted); }
 .project-item small { display: block; }
 .project-item small { margin-top: 4px; color: var(--muted); }
 .project-item.active { border-left-color: var(--green); background: #f7fbf8; }
+.project-item.remote { border-left-color: var(--orange); background: #fffaf5; }
 .project-item-actions { display: flex; gap: 8px; }
 .project-item-actions button { min-height: 32px; padding: 0 10px; }
 .project-delete { color: var(--red); }
 .project-empty { padding: 18px; border: 1px dashed var(--line); color: var(--muted); text-align: center; }
+.project-source-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-right: 6px;
+  background: #eaf6ff;
+  color: var(--blue);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.project-item.remote .project-source-pill {
+  background: #fff0db;
+  color: var(--orange);
+}
 
 .primary-button {
   border-color: var(--green);

@@ -37,7 +37,7 @@ def load_settings() -> Settings:
     )
     return Settings(
         environment=environment,
-        database_url=os.getenv("SISAVALIA_DATABASE_URL") or None,
+        database_url=os.getenv("SISAVALIA_DATABASE_URL") or os.getenv("DATABASE_URL") or None,
         enable_fixture_connector=_as_bool(
             os.getenv("SISAVALIA_ENABLE_FIXTURE_CONNECTOR"),
             default=default_fixture,
